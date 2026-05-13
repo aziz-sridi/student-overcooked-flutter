@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "888637651520",
+    "firebase_url": "https://studnetovercooked-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "studnetovercooked",
+    "storage_bucket": "studnetovercooked.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:888637651520:android:3186576a7959b27009fda5",
+        "android_client_info": {
+          "package_name": "com.student.overcooked"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "888637651520-4115251u0gqb3sd7b5a2vrgqtq0kigkm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8-LcNsCV14vSnEZhZk08XCW7ONTS4xmY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "888637651520-4115251u0gqb3sd7b5a2vrgqtq0kigkm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
