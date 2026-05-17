@@ -4,11 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'core/theme/app_theme.dart';
 import 'data/mascot_store.dart';
+import 'data/song_store.dart';
 import 'data/task_store.dart';
 import 'data/project_store.dart';
 import 'data/theme_store.dart';
 import 'data/notification_store.dart';
 import 'data/auth_store.dart';
+import 'data/subject_store.dart';
 import 'features/auth/auth_gate_screen.dart';
 import 'firebase_options.dart';
 
@@ -29,6 +31,8 @@ Future<void> main() async {
   await MascotStore.instance.initialize();
   await ThemeStore.instance.initialize();
   await NotificationStore.instance.initialize();
+  await SubjectStore.instance.initialize();
+  await SongStore.instance.initialize();
   runApp(const StudentOvercookedApp());
 }
 

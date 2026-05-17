@@ -51,15 +51,20 @@ class HomeScreen extends StatelessWidget {
                   ValueListenableBuilder<List<TaskItem>>(
                     valueListenable: TaskStore.instance.tasksNotifier,
                     builder: (context, tasks, _) {
-                      final stats = _buildQuickStats(_ownedTasks(tasks));
-                      return SizedBox(
-                        height: 142,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: stats.length,
-                          itemBuilder: (context, index) =>
-                              QuickStatCard(item: stats[index]),
-                        ),
+                      return ValueListenableBuilder<MascotState>(
+                        valueListenable: MascotStore.instance.state,
+                        builder: (context, mascotState, _) {
+                          final stats = _buildQuickStats(_ownedTasks(tasks));
+                          return SizedBox(
+                            height: 142,
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: stats.length,
+                              itemBuilder: (context, index) =>
+                                  QuickStatCard(item: stats[index]),
+                            ),
+                          );
+                        },
                       );
                     },
                   ),
@@ -111,7 +116,9 @@ class HomeScreen extends StatelessWidget {
   }
 
   List<TaskItem> _ownedTasks(List<TaskItem> tasks) {
-    return tasks.where((task) => task.assignee == TaskStore.currentUser).toList();
+    return tasks
+        .where((task) => TaskStore.instance.isCurrentUserLabel(task.assignee))
+        .toList();
   }
 
   List<QuickStatItem> _buildQuickStats(List<TaskItem> tasks) {
@@ -119,13 +126,6 @@ class HomeScreen extends StatelessWidget {
     final done = tasks.where((task) => task.isDone).length;
     final overdue = tasks.where((task) => task.isOverdue).length;
     final dueSoon = tasks.where((task) => task.isDueSoon).length;
-    final projectCount = tasks
-        .where((task) => task.hasProject)
-        .map((task) => task.projectId)
-        .whereType<String>()
-        .toSet()
-        .length;
-
     return [
       QuickStatItem(
         label: 'Tasks',
@@ -144,12 +144,6 @@ class HomeScreen extends StatelessWidget {
         value: '$dueSoon',
         icon: Icons.schedule_rounded,
         iconColor: AppColors.mustardYellow,
-      ),
-      QuickStatItem(
-        label: 'Projects',
-        value: '$projectCount',
-        icon: Icons.folder_open_rounded,
-        iconColor: AppColors.successGreen,
       ),
     ];
   }
@@ -249,8 +243,15 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _CookedMeterCard extends StatelessWidget {
+class _CookedMeterCard extends StatefulWidget {
   const _CookedMeterCard();
+
+  @override
+  State<_CookedMeterCard> createState() => _CookedMeterCardState();
+}
+
+class _CookedMeterCardState extends State<_CookedMeterCard> {
+  double? _lastSyncedMeter;
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +264,18 @@ class _CookedMeterCard extends StatelessWidget {
         return ValueListenableBuilder<MascotState>(
           valueListenable: MascotStore.instance.state,
           builder: (context, mascotState, _) {
+            if ((_lastSyncedMeter ?? -1) != meter.value) {
+              _lastSyncedMeter = meter.value;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) {
+                  return;
+                }
+                if ((MascotStore.instance.state.value.cookedMeter - meter.value).abs() > 0.1) {
+                  MascotStore.instance.setCookedMeter(meter.value);
+                }
+              });
+            }
+
             return Container(
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
@@ -282,12 +295,11 @@ class _CookedMeterCard extends StatelessWidget {
                   Container(
                     width: 120,
                     height: 120,
-                    decoration: BoxDecoration(
-                      color: AppColors.progressTrack,
-                      borderRadius: BorderRadius.circular(20),
+                    alignment: Alignment.center,
+                    child: Image.asset(
+                      mascotState.imageAssetPath,
+                      fit: BoxFit.contain,
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Image.asset(mascotState.imageAssetPath, fit: BoxFit.cover),
                   ),
                   const SizedBox(height: 14),
                   FilledButton(
@@ -295,11 +307,7 @@ class _CookedMeterCard extends StatelessWidget {
                       backgroundColor: AppColors.burntOrange,
                       foregroundColor: AppColors.white,
                     ),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ShopScreen()),
-                      );
-                    },
+                    onPressed: () => _showOwnedMascotsPicker(context),
                     child: const Text('Change mascot'),
                   ),
                   const SizedBox(height: 16),
@@ -324,7 +332,7 @@ class _CookedMeterCard extends StatelessWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          '${mascotState.mascotLabel} is currently ${meter.stageLabel.toLowerCase()} based on your live task progress.',
+                            '${mascotState.mascotLabel} is currently ${meter.stageLabel.toLowerCase()} based on your live task progress.',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: AppColors.textSecondary,
                               ),
@@ -342,19 +350,26 @@ class _CookedMeterCard extends StatelessWidget {
   }
 
   _CookedMeterSnapshot _buildCookedMeter(List<TaskItem> allTasks) {
-    final tasks = allTasks.where((task) => task.assignee == TaskStore.currentUser).toList();
+    final tasks = allTasks
+        .where((task) => TaskStore.instance.isCurrentUserLabel(task.assignee))
+        .toList();
     if (tasks.isEmpty) {
       return const _CookedMeterSnapshot(value: 25, stage: CookedStage.cozy);
     }
 
     final total = tasks.length;
-    final done = tasks.where((task) => task.isDone).length;
+    final done = tasks.where((task) => task.state == TaskState.done || task.completed).length;
+    final inProgress = tasks.where((task) => task.state == TaskState.inProgress).length;
     final overdue = tasks.where((task) => task.isOverdue).length;
     final dueSoon = tasks.where((task) => task.isDueSoon).length;
-    final projects = tasks.where((task) => task.hasProject).length;
 
-    final completionScore = (done / total) * 100;
-    final raw = completionScore + (projects * 1.5) - (overdue * 10) - (dueSoon * 4);
+    // Inverse logic: meter should go DOWN when tasks are completed
+    // More incomplete tasks = higher meter (more urgent)
+    final incompleteScore = ((total - done) / total) * 75;
+    final urgencyBonus = (inProgress / total) * 12;
+    final overduePenalty = overdue * 18;
+    final dueSoonPenalty = dueSoon * 6;
+    final raw = incompleteScore + urgencyBonus + overduePenalty + dueSoonPenalty + 20;
     final value = raw.clamp(0, 100).toDouble();
 
     return _CookedMeterSnapshot(value: value, stage: _stageForValue(value));
@@ -380,6 +395,150 @@ class _CookedMeterCard extends StatelessWidget {
       CookedStage.crispy => AppColors.mustardYellow,
       CookedStage.overcooked => AppColors.tomatoRed,
     };
+  }
+
+  Future<void> _showOwnedMascotsPicker(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return ValueListenableBuilder<MascotState>(
+          valueListenable: MascotStore.instance.state,
+          builder: (context, mascotState, _) {
+            final owned = mascotState.ownedMascots.toList();
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'My Mascots',
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tap a mascot to equip it.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                    const SizedBox(height: 14),
+                    if (owned.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'You don\'t own any mascots yet. Visit the shop to unlock more!',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      )
+                    else
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: owned.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.78,
+                        ),
+                        itemBuilder: (context, index) {
+                          final kind = owned[index];
+                          final isSelected = kind == mascotState.kind;
+                          return InkWell(
+                            onTap: () async {
+                              await MascotStore.instance.setKind(kind);
+                              if (dialogContext.mounted) {
+                                Navigator.of(dialogContext).pop();
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppColors.burntOrange
+                                      : AppColors.cardStroke,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Image.asset(
+                                      mascotKindAsset(kind),
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) =>
+                                          const Icon(Icons.pets_rounded),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    mascotKindLabel(kind),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: isSelected
+                                              ? AppColors.burntOrange
+                                              : AppColors.textPrimary,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ShopScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.storefront_outlined),
+                        label: const Text('Browse shop'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }
 

@@ -18,7 +18,9 @@ class ThemeSettingsScreen extends StatelessWidget {
               children: [
                 Text(
                   'Select appearance',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<ThemeMode>(

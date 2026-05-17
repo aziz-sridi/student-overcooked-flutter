@@ -1,10 +1,16 @@
+import 'dart:collection';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/auth_store.dart';
+import '../../data/ask_ai_service.dart';
 import '../../data/focus_queue_store.dart';
+import '../../data/project_chat_store.dart';
 import '../../data/task_store.dart';
 import '../../models/project_item.dart';
 import '../../models/task_item.dart';
@@ -26,26 +32,14 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
   late final TabController _tabController;
   late List<String> _members;
 
-  final List<_ChatMessage> _messages = const [
-    _ChatMessage(sender: 'Lead', text: 'Please update task status before standup.'),
-    _ChatMessage(sender: TaskStore.currentUser, text: 'Done. I also pushed a UI tweak.'),
-    _ChatMessage(sender: 'Sara', text: 'Great. I will review after lunch.'),
-  ].toList();
+  final TextEditingController _chatController = _AskAiHighlightController();
+  final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _askAiController = TextEditingController();
+  final List<_AskAiMessage> _askAiMessages = <_AskAiMessage>[];
+  bool _askingAi = false;
 
-  final TextEditingController _chatController = TextEditingController();
-  final TextEditingController _noteController = TextEditingController(
-    text: 'Sprint notes:\n- Review blockers\n- Confirm release plan',
-  );
-
-  final List<String> _stickyNotes = [
-    'Fix onboarding bug by Friday',
-    'Finalize demo script with team',
-  ];
-  final List<String> _savedFiles = [
-    'requirements.docx',
-    'ui_mockup.fig',
-    'sprint_report.pdf',
-  ];
+  final List<String> _stickyNotes = <String>[];
+  final List<String> _savedFiles = <String>[];
 
   bool _allowSelfAssign = true;
   bool _notificationsEnabled = true;
@@ -62,14 +56,21 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
         setState(() {});
       }
     });
-    _members = [
-      if (widget.project.memberLabels.isNotEmpty)
-        ...widget.project.memberLabels
-      else ...[
-        TaskStore.currentUser,
-        ...List<String>.generate(widget.project.teamCount - 1, (index) => 'Member ${index + 2}'),
-      ],
-    ];
+    final currentLabel = TaskStore.instance.currentMemberLabel();
+    final seededMembers = widget.project.memberLabels.isNotEmpty
+        ? widget.project.memberLabels
+        : [
+            currentLabel,
+            ...List<String>.generate(
+              widget.project.teamCount - 1,
+              (index) => 'Member ${index + 2}',
+            ),
+          ];
+    final uniqueMembers = LinkedHashSet<String>.from(seededMembers);
+    if (currentLabel.isNotEmpty) {
+      uniqueMembers.add(currentLabel);
+    }
+    _members = uniqueMembers.toList();
   }
 
   @override
@@ -77,15 +78,17 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
     _tabController.dispose();
     _chatController.dispose();
     _noteController.dispose();
+    _askAiController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<List<TaskItem>>(
-      valueListenable: TaskStore.instance.tasksNotifier,
-      builder: (context, value, child) {
-        final tasks = TaskStore.instance.tasksForProject(widget.project.id);
+    return StreamBuilder<List<TaskItem>>(
+      stream: TaskStore.instance.projectTasksStream(widget.project.id),
+      builder: (context, snapshot) {
+        final tasks = snapshot.data ?? <TaskItem>[];
+        final tasksError = snapshot.error;
 
         return Scaffold(
           appBar: AppBar(
@@ -115,11 +118,26 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
             unselectedItemColor: AppColors.textSecondary,
             onTap: _goToTab,
             items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.timer_rounded), label: 'Focus'),
-              BottomNavigationBarItem(icon: Icon(Icons.task_rounded), label: 'Tasks'),
-              BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-              BottomNavigationBarItem(icon: Icon(Icons.folder_rounded), label: 'Projects'),
-              BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.timer_rounded),
+                label: 'Focus',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.task_rounded),
+                label: 'Tasks',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_rounded),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.folder_rounded),
+                label: 'Projects',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person_rounded),
+                label: 'Profile',
+              ),
             ],
           ),
           body: TabBarView(
@@ -127,20 +145,30 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
             children: [
               _TasksTab(
                 tasks: tasks,
+                projectId: widget.project.id,
                 allowSelfAssign: _allowSelfAssign,
+                loadError: tasksError,
                 onClaimTask: _claimTask,
                 onEditTask: _showEditTaskDialog,
                 onSendToFocus: _sendTaskToFocus,
               ),
               _ChatTab(
-                messages: _messages,
+                messageStream: ProjectChatStore.instance.messagesForProject(
+                  widget.project.id,
+                ),
                 inputController: _chatController,
-                onSend: _sendChatMessage,
+                onSendMessage: _sendChatMessage,
+                onSendAiPrompt: _sendChatAiPrompt,
+                currentUserId: AuthStore.instance.user.value?.uid,
               ),
               _WorkspaceTab(
                 noteController: _noteController,
                 stickyNotes: _stickyNotes,
                 savedFiles: _savedFiles,
+                askAiController: _askAiController,
+                askAiMessages: _askAiMessages,
+                onAskAi: _sendAskAi,
+                askingAi: _askingAi,
                 onAddStickyNote: _showAddStickyNoteDialog,
                 onUploadFile: _uploadFile,
                 onRemoveSticky: _removeSticky,
@@ -151,8 +179,10 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
                 notificationsEnabled: _notificationsEnabled,
                 inviteLink: _inviteLink,
                 onCopyInviteLink: _copyInviteLink,
-                onToggleSelfAssign: (value) => setState(() => _allowSelfAssign = value),
-                onToggleNotifications: (value) => setState(() => _notificationsEnabled = value),
+                onToggleSelfAssign: (value) =>
+                    setState(() => _allowSelfAssign = value),
+                onToggleNotifications: (value) =>
+                    setState(() => _notificationsEnabled = value),
                 onRemoveMember: (member) {
                   setState(() => _members.remove(member));
                 },
@@ -179,7 +209,6 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
       context,
       fixedProjectId: widget.project.id,
       fixedProjectTitle: widget.project.title,
-      fixedSubject: widget.project.subject,
       allowAssigneeEditing: true,
       members: _members,
     );
@@ -188,7 +217,11 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
       return;
     }
 
-    await TaskStore.instance.addTask(created.copyWith(assignee: created.assignee ?? TaskStore.currentUser));
+    try {
+      await TaskStore.instance.addProjectTask(created);
+    } catch (error) {
+      _showMessage('Could not create task. ${_cleanError(error)}');
+    }
   }
 
   Future<void> _showEditTaskDialog(TaskItem task) async {
@@ -211,7 +244,11 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
       return;
     }
 
-    await TaskStore.instance.updateTask(edited);
+    try {
+      await TaskStore.instance.updateProjectTask(edited);
+    } catch (error) {
+      _showMessage('Could not update task. ${_cleanError(error)}');
+    }
   }
 
   Future<void> _claimTask(TaskItem task) async {
@@ -219,12 +256,19 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
       _showMessage('Self-assign is disabled in project settings.');
       return;
     }
-    await TaskStore.instance.claimTask(task.id);
-    _showMessage('You claimed "${task.title}".');
+    try {
+      await TaskStore.instance.claimProjectTask(
+        projectId: widget.project.id,
+        taskId: task.id,
+      );
+      _showMessage('You claimed "${task.title}".');
+    } catch (error) {
+      _showMessage('Could not claim task. ${_cleanError(error)}');
+    }
   }
 
   void _sendTaskToFocus(TaskItem task) {
-    if (task.assignee != TaskStore.currentUser) {
+    if (!TaskStore.instance.isCurrentUserLabel(task.assignee)) {
       _showMessage('Only the task owner can send this project task to Focus.');
       return;
     }
@@ -232,15 +276,93 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
     _showMessage('Added "${task.title}" to Focus queue.');
   }
 
-  void _sendChatMessage() {
-    final text = _chatController.text.trim();
+  void _sendChatMessage(String text) async {
     if (text.isEmpty) {
       return;
     }
+    try {
+      await ProjectChatStore.instance.sendMessage(
+        projectId: widget.project.id,
+        text: text,
+      );
+    } catch (error) {
+      _showMessage(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  Future<void> _sendChatAiPrompt(String prompt, {required String rawMessage}) async {
+    try {
+      await ProjectChatStore.instance.sendMessage(
+        projectId: widget.project.id,
+        text: rawMessage,
+      );
+    } catch (error) {
+      _showMessage(error.toString().replaceFirst('Bad state: ', ''));
+      return;
+    }
+
+    try {
+      final response = await AskAiService.instance.ask(
+        prompt: prompt,
+        projectId: widget.project.id,
+        projectTitle: widget.project.title,
+      );
+      if (!mounted) {
+        return;
+      }
+      await ProjectChatStore.instance.sendAiMessage(
+        projectId: widget.project.id,
+        text: response,
+      );
+    } catch (error) {
+      _showMessage(error.toString().replaceFirst('Bad state: ', ''));
+    }
+  }
+
+  void _sendAskAi() async {
+    var prompt = _askAiController.text.trim();
+    if (prompt.isEmpty) {
+      return;
+    }
+
+    if (prompt.toLowerCase().startsWith('/askai')) {
+      prompt = prompt.substring(6).trim();
+      if (prompt.isEmpty) {
+        _showMessage('Ask a question directly in the workspace.');
+        return;
+      }
+    }
+
     setState(() {
-      _messages.add(_ChatMessage(sender: TaskStore.currentUser, text: text));
-      _chatController.clear();
+      _askingAi = true;
+      _askAiMessages.add(_AskAiMessage(role: _AskAiRole.user, text: prompt));
+      _askAiController.clear();
     });
+
+    try {
+      final response = await AskAiService.instance.ask(
+        prompt: prompt,
+        projectId: widget.project.id,
+        projectTitle: widget.project.title,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _askAiMessages.add(
+          _AskAiMessage(role: _AskAiRole.assistant, text: response),
+        );
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage(error.toString().replaceFirst('Bad state: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _askingAi = false);
+      }
+    }
   }
 
   Future<void> _showAddStickyNoteDialog() async {
@@ -252,10 +374,15 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
         content: TextField(
           controller: controller,
           maxLines: 3,
-          decoration: const InputDecoration(hintText: 'Type a quick sticky note...'),
+          decoration: const InputDecoration(
+            hintText: 'Type a quick sticky note...',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             child: const Text('Add'),
@@ -289,7 +416,17 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _cleanError(Object error) {
+    return error
+        .toString()
+        .replaceFirst('Exception: ', '')
+        .replaceFirst('FirebaseException: ', '')
+        .replaceFirst('Bad state: ', '');
   }
 
   Future<void> _copyInviteLink() async {
@@ -304,27 +441,46 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
 class _TasksTab extends StatelessWidget {
   const _TasksTab({
     required this.tasks,
+    required this.projectId,
     required this.allowSelfAssign,
+    required this.loadError,
     required this.onClaimTask,
     required this.onEditTask,
     required this.onSendToFocus,
   });
 
   final List<TaskItem> tasks;
+  final String projectId;
   final bool allowSelfAssign;
+  final Object? loadError;
   final ValueChanged<TaskItem> onClaimTask;
   final ValueChanged<TaskItem> onEditTask;
   final ValueChanged<TaskItem> onSendToFocus;
 
   @override
   Widget build(BuildContext context) {
+    if (loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'Could not load project tasks. Check your permissions or connection.',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+
     if (tasks.isEmpty) {
       return Center(
         child: Text(
           'No project tasks yet.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
         ),
       );
     }
@@ -335,6 +491,7 @@ class _TasksTab extends StatelessWidget {
         for (final task in tasks)
           _ProjectTaskCard(
             task: task,
+            projectId: projectId,
             allowSelfAssign: allowSelfAssign,
             onClaim: () => onClaimTask(task),
             onEdit: () => onEditTask(task),
@@ -348,6 +505,7 @@ class _TasksTab extends StatelessWidget {
 class _ProjectTaskCard extends StatelessWidget {
   const _ProjectTaskCard({
     required this.task,
+    required this.projectId,
     required this.allowSelfAssign,
     required this.onClaim,
     required this.onEdit,
@@ -355,6 +513,7 @@ class _ProjectTaskCard extends StatelessWidget {
   });
 
   final TaskItem task;
+  final String projectId;
   final bool allowSelfAssign;
   final VoidCallback onClaim;
   final VoidCallback onEdit;
@@ -363,8 +522,10 @@ class _ProjectTaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUnclaimed = task.assignee == null;
-    final isMine = task.assignee == TaskStore.currentUser;
-    final ownerLabel = isUnclaimed ? 'Unclaimed' : (isMine ? 'Owner: You' : 'Owner: ${task.assignee}');
+    final isMine = TaskStore.instance.isCurrentUserLabel(task.assignee);
+    final ownerLabel = isUnclaimed
+        ? 'Unclaimed'
+        : (isMine ? 'Owner: You' : 'Owner: ${task.assignee}');
 
     return TaskCard(
       task: task,
@@ -373,13 +534,32 @@ class _ProjectTaskCard extends StatelessWidget {
       onEdit: onEdit,
       onEditLocked: () {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Only the task owner can edit this task.')),
+          const SnackBar(
+            content: Text('Only the task owner can edit this task.'),
+          ),
         );
       },
       onAddToFocus: onSendToFocus,
       onToggleComplete: (done) async {
-        await TaskStore.instance.setCompletion(task.id, done);
-        FocusQueueStore.instance.markTaskCompletion(task.id, done);
+        if (projectId.isEmpty) {
+          return;
+        }
+        try {
+          await TaskStore.instance.setProjectTaskCompletion(
+            projectId: projectId,
+            taskId: task.id,
+            done: done,
+          );
+          FocusQueueStore.instance.markTaskCompletion(task.id, done);
+        } catch (error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                "Could not update task. ${error.toString().replaceFirst('Exception: ', '')}",
+              ),
+            ),
+          );
+        }
       },
       ownerLabel: ownerLabel,
       onClaim: isUnclaimed ? onClaim : null,
@@ -390,89 +570,200 @@ class _ProjectTaskCard extends StatelessWidget {
 
 class _ChatTab extends StatelessWidget {
   const _ChatTab({
-    required this.messages,
+    required this.messageStream,
     required this.inputController,
-    required this.onSend,
+    required this.onSendMessage,
+    required this.onSendAiPrompt,
+    required this.currentUserId,
   });
 
-  final List<_ChatMessage> messages;
+  final Stream<List<ProjectChatMessage>> messageStream;
   final TextEditingController inputController;
-  final VoidCallback onSend;
+  final ValueChanged<String> onSendMessage;
+  final Future<void> Function(String prompt, {required String rawMessage}) onSendAiPrompt;
+  final String? currentUserId;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            children: [
-              for (final message in messages)
-                Align(
-                  alignment: message.sender == TaskStore.currentUser
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 300),
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: message.sender == TaskStore.currentUser
-                          ? AppColors.burntOrange.withValues(alpha: 0.15)
-                          : Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.cardStroke),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          message.sender,
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                color: AppColors.burntOrange,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(message.text),
-                      ],
+          child: StreamBuilder<List<ProjectChatMessage>>(
+            stream: messageStream,
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    'Chat unavailable right now. Check your connection or permissions.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                ),
-            ],
+                );
+              }
+
+              final messages = snapshot.data ?? <ProjectChatMessage>[];
+              if (messages.isEmpty) {
+                return Center(
+                  child: Text(
+                    'No messages yet. Start the conversation.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                );
+              }
+
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                children: [
+                  for (final message in messages)
+                    Align(
+                      alignment: message.senderUid == currentUserId
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 300),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: message.senderUid == currentUserId
+                              ? AppColors.burntOrange.withValues(alpha: 0.15)
+                              : Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.cardStroke),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              message.senderLabel,
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(
+                                    color: AppColors.burntOrange,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            if (message.senderUid == 'ai')
+                              MarkdownBody(
+                                data: message.text,
+                                selectable: true,
+                                styleSheet: MarkdownStyleSheet.fromTheme(
+                                  Theme.of(context),
+                                ).copyWith(p: Theme.of(context).textTheme.bodyMedium),
+                              )
+                            else
+                              Text(message.text),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
         SafeArea(
           top: false,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 8),
+                  child: AnimatedBuilder(
+                    animation: inputController,
+                    builder: (context, _) {
+                      final shouldHide = inputController.text
+                          .toLowerCase()
+                          .startsWith('/askai');
+                      if (shouldHide) return const SizedBox.shrink();
+                      return ActionChip(
+                        avatar: const Icon(
+                          Icons.auto_awesome_rounded,
+                          size: 16,
+                          color: AppColors.burntOrange,
+                        ),
+                        label: RichText(
+                          text: TextSpan(
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                            children: const [
+                              TextSpan(
+                                text: '/askai',
+                                style: TextStyle(
+                                  color: AppColors.burntOrange,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              TextSpan(text: '  Ask the AI assistant'),
+                            ],
+                          ),
+                        ),
+                        backgroundColor:
+                            AppColors.burntOrange.withValues(alpha: 0.10),
+                        side: const BorderSide(color: AppColors.burntOrange),
+                        onPressed: () {
+                          inputController.text = '/askai ';
+                          inputController.selection = TextSelection.fromPosition(
+                            TextPosition(offset: inputController.text.length),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: inputController,
                     decoration: InputDecoration(
-                      hintText: 'Type a message',
+                      hintText: 'Type a message or /askai to ask AI',
                       filled: true,
                       fillColor: AppColors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.cardStroke),
+                        borderSide: const BorderSide(
+                          color: AppColors.cardStroke,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.cardStroke),
+                        borderSide: const BorderSide(
+                          color: AppColors.cardStroke,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 FloatingActionButton.small(
-                  onPressed: onSend,
+                  onPressed: () {
+                    final raw = inputController.text.trim();
+                    if (raw.isEmpty) {
+                      return;
+                    }
+                    inputController.clear();
+                    if (raw.toLowerCase().startsWith('/askai')) {
+                      final prompt = raw.substring(6).trim();
+                      if (prompt.isEmpty) {
+                        return;
+                      }
+                      onSendAiPrompt(prompt, rawMessage: raw);
+                      return;
+                    }
+                    onSendMessage(raw);
+                  },
                   backgroundColor: AppColors.burntOrange,
                   foregroundColor: AppColors.white,
                   child: const Icon(Icons.send_rounded),
                 ),
+              ],
+            ),
               ],
             ),
           ),
@@ -487,6 +778,10 @@ class _WorkspaceTab extends StatelessWidget {
     required this.noteController,
     required this.stickyNotes,
     required this.savedFiles,
+    required this.askAiController,
+    required this.askAiMessages,
+    required this.onAskAi,
+    required this.askingAi,
     required this.onAddStickyNote,
     required this.onUploadFile,
     required this.onRemoveSticky,
@@ -495,6 +790,10 @@ class _WorkspaceTab extends StatelessWidget {
   final TextEditingController noteController;
   final List<String> stickyNotes;
   final List<String> savedFiles;
+  final TextEditingController askAiController;
+  final List<_AskAiMessage> askAiMessages;
+  final VoidCallback onAskAi;
+  final bool askingAi;
   final VoidCallback onAddStickyNote;
   final VoidCallback onUploadFile;
   final ValueChanged<String> onRemoveSticky;
@@ -506,9 +805,9 @@ class _WorkspaceTab extends StatelessWidget {
       children: [
         Text(
           'Shared Notes',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         Row(
@@ -538,24 +837,117 @@ class _WorkspaceTab extends StatelessWidget {
                   onRemove: () => onRemoveSticky(note),
                 ),
             ],
+          )
+        else
+          Text(
+            'No sticky notes yet.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
         const SizedBox(height: 12),
         TextField(
           controller: noteController,
           maxLines: 8,
           decoration: InputDecoration(
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             hintText: 'Write shared notes here...',
           ),
         ),
         const SizedBox(height: 18),
         Text(
-          'Files',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
+          'Ask AI',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Ask the workspace directly.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 10),
+        if (askAiMessages.isNotEmpty)
+          Column(
+            children: [
+              for (final message in askAiMessages)
+                Align(
+                  alignment: message.role == _AskAiRole.user
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: message.role == _AskAiRole.user
+                          ? AppColors.progressTrack
+                          : Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.cardStroke),
+                    ),
+                    child: message.role == _AskAiRole.assistant
+                        ? MarkdownBody(
+                            data: message.text,
+                            selectable: true,
+                            styleSheet: MarkdownStyleSheet.fromTheme(
+                              Theme.of(context),
+                            ).copyWith(p: Theme.of(context).textTheme.bodyMedium),
+                          )
+                        : Text(message.text),
+                  ),
+                ),
+            ],
+          )
+        else
+          Text(
+            'No AI responses yet.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+        if (askingAi)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: LinearProgressIndicator(minHeight: 4),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: askAiController,
+                decoration: InputDecoration(
+                  hintText: 'Summarize today\'s blockers',
+                  filled: true,
+                  fillColor: AppColors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.cardStroke),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.cardStroke),
+                  ),
+                ),
               ),
+            ),
+            const SizedBox(width: 8),
+            FloatingActionButton.small(
+              onPressed: askingAi ? null : onAskAi,
+              backgroundColor: AppColors.burntOrange,
+              foregroundColor: AppColors.white,
+              child: const Icon(Icons.auto_awesome_rounded),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Files',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         for (final fileName in savedFiles)
@@ -564,6 +956,13 @@ class _WorkspaceTab extends StatelessWidget {
             leading: const Icon(Icons.insert_drive_file_outlined),
             title: Text(fileName),
             trailing: const Icon(Icons.download_rounded),
+          ),
+        if (savedFiles.isEmpty)
+          Text(
+            'No files uploaded yet.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
       ],
     );
@@ -608,16 +1007,16 @@ class _SettingsTab extends StatelessWidget {
             children: [
               Text(
                 'Invite Teammates',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               Text(
                 'Share this link or QR to let people join this project quickly.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 10),
               Center(
@@ -638,9 +1037,9 @@ class _SettingsTab extends StatelessWidget {
               const SizedBox(height: 10),
               SelectableText(
                 inviteLink,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 10),
               SizedBox(
@@ -671,9 +1070,9 @@ class _SettingsTab extends StatelessWidget {
             children: [
               Text(
                 'Project Preferences',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               SwitchListTile(
@@ -694,17 +1093,17 @@ class _SettingsTab extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Members',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
         if (members.isEmpty)
           Text(
             'No members left in this project.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
           )
         else
           for (final member in members)
@@ -715,7 +1114,7 @@ class _SettingsTab extends StatelessWidget {
                 child: Text(member.characters.first),
               ),
               title: Text(member),
-              trailing: member == TaskStore.currentUser
+                trailing: TaskStore.instance.isCurrentUserLabel(member)
                   ? const Text('You')
                   : IconButton(
                       icon: const Icon(Icons.person_remove_alt_1_outlined),
@@ -750,9 +1149,9 @@ class _StickyNoteChip extends StatelessWidget {
               note,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
           IconButton(
@@ -766,9 +1165,43 @@ class _StickyNoteChip extends StatelessWidget {
   }
 }
 
-class _ChatMessage {
-  const _ChatMessage({required this.sender, required this.text});
+enum _AskAiRole { user, assistant }
 
-  final String sender;
+class _AskAiMessage {
+  const _AskAiMessage({required this.role, required this.text});
+
+  final _AskAiRole role;
   final String text;
+}
+
+class _AskAiHighlightController extends TextEditingController {
+  static final RegExp _pattern = RegExp(r'^/askai\b', caseSensitive: false);
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final match = _pattern.firstMatch(text);
+    if (match == null) {
+      return super.buildTextSpan(
+        context: context,
+        style: style,
+        withComposing: withComposing,
+      );
+    }
+    final highlightStyle = (style ?? const TextStyle()).copyWith(
+      color: AppColors.burntOrange,
+      fontWeight: FontWeight.w800,
+      backgroundColor: AppColors.burntOrange.withValues(alpha: 0.12),
+    );
+    return TextSpan(
+      style: style,
+      children: [
+        TextSpan(text: text.substring(0, match.end), style: highlightStyle),
+        TextSpan(text: text.substring(match.end)),
+      ],
+    );
+  }
 }

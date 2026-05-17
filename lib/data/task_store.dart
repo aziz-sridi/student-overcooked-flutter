@@ -6,16 +6,13 @@ import 'package:flutter/material.dart';
 
 import '../models/task_item.dart';
 import 'auth_store.dart';
+import 'mascot_store.dart';
 import 'mock_data.dart';
 
 enum TaskSyncStatus { loading, syncing, synced, offline, error }
 
 class TaskSyncState {
-  const TaskSyncState({
-    required this.status,
-    this.message,
-    this.errorCode,
-  });
+  const TaskSyncState({required this.status, this.message, this.errorCode});
 
   final TaskSyncStatus status;
   final String? message;
@@ -29,10 +26,12 @@ class TaskStore {
 
   static const String currentUser = 'You';
 
-  final ValueNotifier<List<TaskItem>> tasksNotifier = ValueNotifier<List<TaskItem>>([]);
-  final ValueNotifier<TaskSyncState> syncStateNotifier = ValueNotifier<TaskSyncState>(
-    const TaskSyncState(status: TaskSyncStatus.loading),
-  );
+  final ValueNotifier<List<TaskItem>> tasksNotifier =
+      ValueNotifier<List<TaskItem>>([]);
+  final ValueNotifier<TaskSyncState> syncStateNotifier =
+      ValueNotifier<TaskSyncState>(
+        const TaskSyncState(status: TaskSyncStatus.loading),
+      );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _initialized = false;
@@ -49,10 +48,11 @@ class TaskStore {
   List<TaskItem> get tasks => tasksNotifier.value;
 
   List<TaskItem> get workNowTasks {
-    final items = tasks
-        .where((task) => task.assignee == currentUser && !task.hasProject)
-        .toList()
-      ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
+    final items =
+        tasks
+            .where((task) => isCurrentUserLabel(task.assignee) && !task.hasProject && !task.isDone)
+            .toList()
+          ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
     return items.take(3).toList();
   }
 
@@ -80,17 +80,44 @@ class TaskStore {
   List<TaskItem> tasksForSubject(String subject, {bool onlyMine = false}) {
     final list = tasks
         .where((task) => task.subject == subject)
-        .where((task) => !onlyMine || task.assignee == currentUser)
+        .where((task) => !onlyMine || isCurrentUserLabel(task.assignee))
         .toList();
     list.sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
     return list;
   }
 
-  bool canEdit(TaskItem task, {String user = currentUser}) {
+  String currentMemberLabel() {
+    final user = AuthStore.instance.user.value;
+    if (user == null) {
+      return currentUser;
+    }
+    final name = user.displayName?.trim();
+    if (name != null && name.isNotEmpty) {
+      return name;
+    }
+    final email = user.email?.trim();
+    if (email != null && email.isNotEmpty) {
+      return email;
+    }
+    return 'Member';
+  }
+
+  bool isCurrentUserLabel(String? label) {
+    if (label == null || label.isEmpty) {
+      return false;
+    }
+    final currentLabel = currentMemberLabel();
+    return label == currentLabel || label == currentUser;
+  }
+
+  bool canEdit(TaskItem task, {String? user}) {
     if (!task.hasProject) {
       return true;
     }
-    return task.assignee == user;
+    if (user != null) {
+      return task.assignee == user;
+    }
+    return isCurrentUserLabel(task.assignee);
   }
 
   Future<void> addTask(TaskItem task) async {
@@ -101,6 +128,73 @@ class TaskStore {
   Future<void> updateTask(TaskItem updated) async {
     final normalized = _normalizeOwnership(updated);
     await _persistTask(normalized);
+  }
+
+  Future<void> deleteTask(String taskId) async {
+    final uid = _activeUid;
+    if (uid == null) {
+      return;
+    }
+    _unsyncedTasksById.remove(taskId);
+    _serverTasksById.remove(taskId);
+    _publishVisibleTasks();
+    try {
+      await _taskCollection(uid).doc(taskId).delete();
+    } catch (error) {
+      _lastSyncErrorCode = _extractErrorCode(error);
+    }
+  }
+
+  Stream<List<TaskItem>> projectTasksStream(String projectId) {
+    return _projectTaskCollection(projectId).snapshots().map((snapshot) {
+      final items = snapshot.docs.map(_fromFirestore).toList();
+      items.sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
+      return items;
+    });
+  }
+
+  Future<void> addProjectTask(TaskItem task) async {
+    if (task.projectId == null) {
+      throw StateError('Project tasks must include a projectId.');
+    }
+    await _projectTaskCollection(
+      task.projectId!,
+    ).doc(task.id).set(_toFirestore(task));
+  }
+
+  Future<void> updateProjectTask(TaskItem updated) async {
+    if (updated.projectId == null) {
+      throw StateError('Project tasks must include a projectId.');
+    }
+    await _projectTaskCollection(
+      updated.projectId!,
+    ).doc(updated.id).set(_toFirestore(updated));
+  }
+
+  Future<void> claimProjectTask({
+    required String projectId,
+    required String taskId,
+    String? user,
+  }) async {
+    final owner = user ?? currentMemberLabel();
+    await _projectTaskCollection(
+      projectId,
+    ).doc(taskId).set({'assignee': owner}, SetOptions(merge: true));
+  }
+
+  Future<void> setProjectTaskCompletion({
+    required String projectId,
+    required String taskId,
+    required bool done,
+  }) async {
+    await _projectTaskCollection(projectId).doc(taskId).set({
+      'state': done ? TaskState.done.name : TaskState.notStarted.name,
+      'completed': done,
+    }, SetOptions(merge: true));
+    // Award coins when project task is marked complete
+    if (done) {
+      await MascotStore.instance.addCoins(50);
+    }
   }
 
   Future<void> claimTask(String taskId, {String user = currentUser}) async {
@@ -122,6 +216,10 @@ class TaskStore {
         completed: done,
       ),
     );
+    // Award coins when task is marked complete
+    if (done) {
+      await MascotStore.instance.addCoins(50);
+    }
   }
 
   Future<void> reset() async {
@@ -133,10 +231,12 @@ class TaskStore {
 
     _unsyncedTasksById
       ..clear()
-      ..addEntries(seeded.map((task) {
-        final normalized = _normalizeOwnership(task);
-        return MapEntry(normalized.id, normalized);
-      }));
+      ..addEntries(
+        seeded.map((task) {
+          final normalized = _normalizeOwnership(task);
+          return MapEntry(normalized.id, normalized);
+        }),
+      );
     _publishVisibleTasks();
 
     _pendingMutations += 1;
@@ -152,7 +252,10 @@ class TaskStore {
       final seedBatch = _firestore.batch();
       for (final task in seeded) {
         final normalized = _normalizeOwnership(task);
-        seedBatch.set(_taskCollection(uid).doc(normalized.id), _toFirestore(normalized));
+        seedBatch.set(
+          _taskCollection(uid).doc(normalized.id),
+          _toFirestore(normalized),
+        );
       }
       await seedBatch.commit();
       _unsyncedTasksById.clear();
@@ -222,67 +325,53 @@ class TaskStore {
     _tasksSubscription = _taskCollection(uid)
         .snapshots(includeMetadataChanges: true)
         .listen(
-      (snapshot) {
-        if (snapshot.docs.isEmpty && !snapshot.metadata.isFromCache) {
-          unawaited(_seedIfEmpty(uid));
-        }
-        final serverItems = snapshot.docs
-            .map(_fromFirestore)
-            .map(_normalizeOwnership)
-            .toList();
-        _serverTasksById
-          ..clear()
-          ..addEntries(serverItems.map((task) => MapEntry(task.id, task)));
+          (snapshot) {
+            final serverItems = snapshot.docs
+                .map(_fromFirestore)
+                .map(_normalizeOwnership)
+                .toList();
+            _serverTasksById
+              ..clear()
+              ..addEntries(serverItems.map((task) => MapEntry(task.id, task)));
 
-        final ackedIds = <String>[];
-        for (final entry in _unsyncedTasksById.entries) {
-          final serverVersion = _serverTasksById[entry.key];
-          if (serverVersion != null && _sameTask(serverVersion, entry.value)) {
-            ackedIds.add(entry.key);
-          }
-        }
-        for (final id in ackedIds) {
-          _unsyncedTasksById.remove(id);
-        }
+            final ackedIds = <String>[];
+            for (final entry in _unsyncedTasksById.entries) {
+              final serverVersion = _serverTasksById[entry.key];
+              if (serverVersion != null &&
+                  _sameTask(serverVersion, entry.value)) {
+                ackedIds.add(entry.key);
+              }
+            }
+            for (final id in ackedIds) {
+              _unsyncedTasksById.remove(id);
+            }
 
-        _publishVisibleTasks();
-        _lastSnapshotFromCache = snapshot.metadata.isFromCache;
-        _lastSnapshotHasPendingWrites = snapshot.metadata.hasPendingWrites;
-        _refreshSyncState();
-      },
-      onError: (error) {
-        _lastSyncErrorCode = _extractErrorCode(error);
-        _setSyncState(
-          TaskSyncState(
-            status: TaskSyncStatus.error,
-            message: 'Could not sync tasks. Retrying when network is back.',
-            errorCode: _lastSyncErrorCode,
-          ),
+            _publishVisibleTasks();
+            _lastSnapshotFromCache = snapshot.metadata.isFromCache;
+            _lastSnapshotHasPendingWrites = snapshot.metadata.hasPendingWrites;
+            _refreshSyncState();
+          },
+          onError: (error) {
+            _lastSyncErrorCode = _extractErrorCode(error);
+            _setSyncState(
+              TaskSyncState(
+                status: TaskSyncStatus.error,
+                message: 'Could not sync tasks. Retrying when network is back.',
+                errorCode: _lastSyncErrorCode,
+              ),
+            );
+          },
         );
-      },
-    );
   }
 
   CollectionReference<Map<String, dynamic>> _taskCollection(String uid) {
     return _firestore.collection('users').doc(uid).collection('tasks');
   }
 
-  Future<void> _seedIfEmpty(String uid) async {
-    try {
-      final exists = await _taskCollection(uid).limit(1).get();
-      if (exists.docs.isNotEmpty) {
-        return;
-      }
-
-      final batch = _firestore.batch();
-      for (final task in _seedInitialTasks()) {
-        final normalized = _normalizeOwnership(task);
-        batch.set(_taskCollection(uid).doc(normalized.id), _toFirestore(normalized));
-      }
-      await batch.commit();
-    } catch (_) {
-      // Keep app usable even if initial seeding fails due transient network or rules.
-    }
+  CollectionReference<Map<String, dynamic>> _projectTaskCollection(
+    String projectId,
+  ) {
+    return _firestore.collection('projects').doc(projectId).collection('tasks');
   }
 
   TaskSyncStatus _deriveStatus({
@@ -324,7 +413,9 @@ class TaskStore {
     _pendingMutations += 1;
     _setSyncState(const TaskSyncState(status: TaskSyncStatus.syncing));
     try {
-      await _taskCollection(uid).doc(normalized.id).set(_toFirestore(normalized));
+      await _taskCollection(
+        uid,
+      ).doc(normalized.id).set(_toFirestore(normalized));
       _unsyncedTasksById.remove(normalized.id);
       _lastSyncErrorCode = null;
     } catch (error) {
@@ -356,8 +447,8 @@ class TaskStore {
     final message = _unsyncedTasksById.isNotEmpty
         ? 'Unsynced changes are kept locally. Tap Retry when ready.'
         : _lastSnapshotFromCache
-            ? 'You are viewing cached tasks.'
-            : null;
+        ? 'You are viewing cached tasks.'
+        : null;
     _setSyncState(
       TaskSyncState(
         status: status,

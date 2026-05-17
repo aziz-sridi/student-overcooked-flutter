@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/project_store.dart';
+import '../../data/subject_store.dart';
 import '../../data/task_store.dart';
 import '../../models/project_item.dart';
 import '../../models/task_item.dart';
@@ -146,6 +147,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final subjectController = TextEditingController();
     String typeLabel = 'Team Project';
     bool linkToSubject = false;
+    final subjects = _subjectOptions();
+    const String newSubjectValue = '__new_subject__';
+    String? selectedSubject = subjects.isNotEmpty ? subjects.first : null;
+    bool addingNewSubject = subjects.isEmpty;
 
     final approved = await showDialog<bool>(
       context: context,
@@ -184,12 +189,45 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     onChanged: (value) => setLocalState(() => linkToSubject = value),
                   ),
                   if (linkToSubject)
-                    TextField(
-                      controller: subjectController,
-                      decoration: const InputDecoration(
-                        labelText: 'Subject',
-                        hintText: 'e.g. Database Systems',
-                      ),
+                    Column(
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: addingNewSubject ? newSubjectValue : selectedSubject,
+                          decoration: const InputDecoration(labelText: 'Subject'),
+                          items: [
+                            for (final subject in subjects)
+                              DropdownMenuItem(value: subject, child: Text(subject)),
+                            const DropdownMenuItem(
+                              value: newSubjectValue,
+                              child: Text('Add new subject...'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setLocalState(() {
+                              if (value == newSubjectValue) {
+                                addingNewSubject = true;
+                                selectedSubject = null;
+                              } else {
+                                addingNewSubject = false;
+                                selectedSubject = value;
+                              }
+                            });
+                          },
+                        ),
+                        if (addingNewSubject) ...[
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: subjectController,
+                            decoration: const InputDecoration(
+                              labelText: 'New subject',
+                              hintText: 'e.g. Database Systems',
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                 ],
               ),
@@ -219,7 +257,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       return;
     }
 
-    final subject = linkToSubject ? subjectController.text.trim() : '';
+    final subject = linkToSubject
+        ? (addingNewSubject ? subjectController.text.trim() : (selectedSubject ?? '').trim())
+        : '';
     if (linkToSubject && subject.isEmpty) {
       _showMessage('Subject is required when linking a project to a subject.');
       return;
@@ -232,6 +272,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         typeLabel: typeLabel,
         subject: linkToSubject ? subject : null,
       );
+      if (linkToSubject && subject.isNotEmpty) {
+        await SubjectStore.instance.addSubject(subject);
+      }
       _showMessage('Project created.');
     } catch (error) {
       _showMessage(error.toString().replaceFirst('Bad state: ', ''));
@@ -299,5 +342,19 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  List<String> _subjectOptions() {
+    final fromTasks = TaskStore.instance.tasks
+        .map((task) => task.subject)
+        .where((subject) => subject.trim().isNotEmpty)
+        .toSet();
+    final merged = <String>{
+      ...fromTasks,
+      ...SubjectStore.instance.subjects.value,
+    };
+    final list = merged.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
   }
 }

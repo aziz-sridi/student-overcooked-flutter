@@ -12,37 +12,31 @@ class ShopScreen extends StatefulWidget {
 }
 
 class _ShopScreenState extends State<ShopScreen> {
-  int _coins = 420;
-  final Set<MascotKind> _ownedMascots = <MascotKind>{MascotKind.potato};
-
   Future<void> _handleMascotAction({
     required MascotState state,
     required MascotKind kind,
     required int price,
   }) async {
-    final isOwned = _ownedMascots.contains(kind);
+    final isOwned = state.ownedMascots.contains(kind);
     if (isOwned) {
       await MascotStore.instance.setKind(kind);
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       _showMessage('Mascot equipped.');
       return;
     }
 
-    if (_coins < price) {
+    if (state.coinBalance < price) {
       _showMessage('Not enough coins to buy this mascot.');
       return;
     }
 
-    setState(() {
-      _coins -= price;
-      _ownedMascots.add(kind);
-    });
-    await MascotStore.instance.setKind(kind);
-    if (!mounted) {
+    try {
+      await MascotStore.instance.purchaseMascot(kind, price);
+    } on StateError catch (e) {
+      _showMessage(e.message);
       return;
     }
+    if (!mounted) return;
     _showMessage('Purchase complete. Mascot unlocked and equipped.');
   }
 
@@ -55,7 +49,6 @@ class _ShopScreenState extends State<ShopScreen> {
     return ValueListenableBuilder<MascotState>(
       valueListenable: MascotStore.instance.state,
       builder: (context, state, _) {
-        _ownedMascots.add(state.kind);
         return Scaffold(
           body: CustomScrollView(
             slivers: [
@@ -68,11 +61,10 @@ class _ShopScreenState extends State<ShopScreen> {
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
                       ),
-                      Expanded(
+                      const Expanded(
                         child: AppTopBar(
                           title: 'Campus Shop',
                           showShopAction: false,
-                          coins: _coins,
                         ),
                       ),
                     ],
@@ -91,11 +83,7 @@ class _ShopScreenState extends State<ShopScreen> {
                           ),
                     ),
                     const SizedBox(height: 8),
-                    // Build a responsive grid of compact mascot cards (hide owned)
                     Builder(builder: (context) {
-                      // Ensure we know the currently owned mascot
-                      _ownedMascots.add(state.kind);
-
                       final all = <Map<String, dynamic>>[
                         {
                           'kind': MascotKind.gigaToast,
@@ -117,7 +105,8 @@ class _ShopScreenState extends State<ShopScreen> {
                         },
                       ];
 
-                      final available = all.where((m) => !_ownedMascots.contains(m['kind'] as MascotKind)).toList();
+                      final available =
+                          all.where((m) => !state.ownedMascots.contains(m['kind'] as MascotKind)).toList();
 
                       if (available.isEmpty) {
                         return Padding(
@@ -155,7 +144,8 @@ class _ShopScreenState extends State<ShopScreen> {
                                 title: title,
                                 price: price,
                                 asset: asset,
-                                onBuy: () => _handleMascotAction(state: state, kind: kind, price: price),
+                                onBuy: () =>
+                                    _handleMascotAction(state: state, kind: kind, price: price),
                               );
                             },
                           );
@@ -173,12 +163,6 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 }
-
-// Removed banner per redesign: shop now shows only mascot cards.
-
-// _MascotChoiceTile removed — replaced by compact grid cards above.
-
-// Utilities removed from shop — utility tiles no longer used.
 
 class _MascotCard extends StatelessWidget {
   const _MascotCard({

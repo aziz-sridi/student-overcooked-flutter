@@ -18,6 +18,7 @@ class TaskCard extends StatelessWidget {
     this.ownerLabel,
     this.onClaim,
     this.canClaim = true,
+    this.onDelete,
   });
 
   final TaskItem task;
@@ -32,6 +33,7 @@ class TaskCard extends StatelessWidget {
   final String? ownerLabel;
   final VoidCallback? onClaim;
   final bool canClaim;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +233,12 @@ class TaskCard extends StatelessWidget {
                   tooltip: 'Send to Focus',
                   onPressed: onAddToFocus,
                   icon: const Icon(Icons.playlist_add_rounded, color: AppColors.burntOrange),
+                ),
+              if (onDelete != null)
+                IconButton(
+                  tooltip: 'Delete task',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.tomatoRed),
                 ),
               if (onMore != null)
                 IconButton(

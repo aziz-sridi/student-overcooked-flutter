@@ -33,6 +33,13 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Backend
+/backend/.env
+/backend/.venv/
+/backend/firebase-service-account.json
+/backend/__pycache__/
+/backend/.pytest_cache/
+
 # Symbolication related
 app.*.symbols
 

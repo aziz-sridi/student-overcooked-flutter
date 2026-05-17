@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/classroom_store.dart';
 import '../../data/focus_queue_store.dart';
+import '../../data/subject_store.dart';
 import '../../data/task_store.dart';
 import '../../models/task_item.dart';
 import '../../widgets/cards/task_card.dart';
@@ -148,56 +150,64 @@ class _TasksScreenState extends State<TasksScreen> {
                 return ValueListenableBuilder<List<TaskItem>>(
                   valueListenable: TaskStore.instance.tasksNotifier,
                   builder: (context, storedTasks, _) {
-                    final syncedTasks = storedTasks.map(focusStore.applyFocusState).toList();
-                    final filteredTasks = _filterTasks(syncedTasks);
-                    final subjects = _buildSubjectSummaries(filteredTasks);
-                    final sortedFlatTasks = [...filteredTasks]
-                      ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
+                    return ValueListenableBuilder<List<String>>(
+                      valueListenable: SubjectStore.instance.subjects,
+                      builder: (context, knownSubjects, _) {
+                        final syncedTasks = storedTasks.map(focusStore.applyFocusState).toList();
+                        final filteredTasks = _filterTasks(syncedTasks);
+                        final subjects = _buildSubjectSummaries(filteredTasks, knownSubjects);
+                        final sortedFlatTasks = [...filteredTasks]
+                          ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
 
-                    final showLoading =
-                        syncState.status == TaskSyncStatus.loading && storedTasks.isEmpty;
-                    final showError = syncState.status == TaskSyncStatus.error && storedTasks.isEmpty;
+                        final showLoading =
+                            syncState.status == TaskSyncStatus.loading && storedTasks.isEmpty;
+                        final showError =
+                            syncState.status == TaskSyncStatus.error && storedTasks.isEmpty;
 
-                    return SliverList.builder(
-                      itemCount: showLoading || showError
-                          ? 1
-                          : _groupBySubject
-                              ? (subjects.isEmpty ? 1 : subjects.length)
-                              : (sortedFlatTasks.isEmpty ? 1 : sortedFlatTasks.length),
-                      itemBuilder: (context, index) {
-                        if (showLoading) {
-                          return const _LoadingTaskState();
-                        }
-                        if (showError) {
-                          return _SyncErrorState(onRetry: TaskStore.instance.retrySync);
-                        }
+                        return SliverList.builder(
+                          itemCount: showLoading || showError
+                              ? 1
+                              : _groupBySubject
+                                  ? (subjects.isEmpty ? 1 : subjects.length)
+                                  : (sortedFlatTasks.isEmpty ? 1 : sortedFlatTasks.length),
+                          itemBuilder: (context, index) {
+                            if (showLoading) {
+                              return const _LoadingTaskState();
+                            }
+                            if (showError) {
+                              return _SyncErrorState(onRetry: TaskStore.instance.retrySync);
+                            }
 
-                        if (_groupBySubject && subjects.isEmpty) {
-                          return const _EmptyTaskState();
-                        }
+                            if (_groupBySubject && subjects.isEmpty) {
+                              return const _EmptyTaskState();
+                            }
 
-                        if (_groupBySubject) {
-                          final summary = subjects[index];
-                          return _SubjectCard(
-                            summary: summary,
-                            onTap: () => _openSubject(summary.subject),
-                          );
-                        }
+                            if (_groupBySubject) {
+                              final summary = subjects[index];
+                              return _SubjectCard(
+                                summary: summary,
+                                onTap: () => _openSubject(summary.subject),
+                                onDelete: () => _confirmDeleteSubject(summary),
+                              );
+                            }
 
-                        if (sortedFlatTasks.isEmpty) {
-                          return const _EmptyTaskState();
-                        }
+                            if (sortedFlatTasks.isEmpty) {
+                              return const _EmptyTaskState();
+                            }
 
-                        final task = sortedFlatTasks[index];
-                        return TaskCard(
-                          task: task,
-                          canEdit: TaskStore.instance.canEdit(task),
-                          onEdit: () => _editTask(task),
-                          onEditLocked: () => _showSoon('Only the task owner can edit this task.'),
-                          onToggleComplete: (done) async {
-                            await _toggleTask(task.id, done);
+                            final task = sortedFlatTasks[index];
+                            return TaskCard(
+                              task: task,
+                              canEdit: TaskStore.instance.canEdit(task),
+                              onEdit: () => _editTask(task),
+                              onEditLocked: () => _showSoon('Only the task owner can edit this task.'),
+                              onToggleComplete: (done) async {
+                                await _toggleTask(task.id, done);
+                              },
+                              onAddToFocus: () => _addToFocus(task),
+                              onDelete: () => _confirmDeleteTask(task),
+                            );
                           },
-                          onAddToFocus: () => _addToFocus(task),
                         );
                       },
                     );
@@ -223,7 +233,9 @@ class _TasksScreenState extends State<TasksScreen> {
 
   List<TaskItem> _filterTasks(List<TaskItem> source) {
     // Always limit to tasks assigned to the current user
-    final owned = source.where((task) => task.assignee == TaskStore.currentUser).toList();
+    final owned = source
+        .where((task) => TaskStore.instance.isCurrentUserLabel(task.assignee))
+        .toList();
 
     if (_searchQuery.isEmpty) {
       return owned;
@@ -234,10 +246,22 @@ class _TasksScreenState extends State<TasksScreen> {
     }).toList();
   }
 
-  List<_SubjectSummary> _buildSubjectSummaries(List<TaskItem> source) {
+  List<_SubjectSummary> _buildSubjectSummaries(
+    List<TaskItem> source,
+    List<String> knownSubjects,
+  ) {
     final grouped = <String, List<TaskItem>>{};
     for (final task in source) {
       grouped.putIfAbsent(task.subject, () => []).add(task);
+    }
+    for (final subject in knownSubjects) {
+      grouped.putIfAbsent(subject, () => <TaskItem>[]);
+    }
+    if (_searchQuery.isNotEmpty) {
+      grouped.removeWhere(
+        (subject, tasks) =>
+            tasks.isEmpty && !subject.toLowerCase().contains(_searchQuery),
+      );
     }
 
     final list = grouped.entries
@@ -246,6 +270,72 @@ class _TasksScreenState extends State<TasksScreen> {
 
     list.sort((a, b) => a.nextDue.difference(b.nextDue).inMinutes);
     return list;
+  }
+
+  Future<void> _confirmDeleteSubject(_SubjectSummary summary) async {
+    final taskCount = summary.tasks.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete class "${summary.subject}"?'),
+        content: Text(
+          taskCount == 0
+              ? 'This will remove the class from your list.'
+              : 'This will remove the class and delete $taskCount task${taskCount == 1 ? '' : 's'} under it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.tomatoRed),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    for (final task in summary.tasks) {
+      await TaskStore.instance.deleteTask(task.id);
+      if (task.id.startsWith(ClassroomStore.taskIdPrefix)) {
+        await ClassroomStore.instance.untrackAssignment(
+          task.id.substring(ClassroomStore.taskIdPrefix.length),
+        );
+      }
+    }
+    await SubjectStore.instance.removeSubject(summary.subject);
+    await ClassroomStore.instance.untrackCourseByName(summary.subject);
+  }
+
+  Future<void> _confirmDeleteTask(TaskItem task) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${task.title}"?'),
+        content: const Text('This task will be removed permanently.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.tomatoRed),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await TaskStore.instance.deleteTask(task.id);
+    if (task.id.startsWith(ClassroomStore.taskIdPrefix)) {
+      await ClassroomStore.instance.untrackAssignment(
+        task.id.substring(ClassroomStore.taskIdPrefix.length),
+      );
+    }
   }
 
   Future<void> _toggleTask(String id, bool done) async {
@@ -324,10 +414,15 @@ class _SubjectSummary {
 }
 
 class _SubjectCard extends StatelessWidget {
-  const _SubjectCard({required this.summary, required this.onTap});
+  const _SubjectCard({
+    required this.summary,
+    required this.onTap,
+    this.onDelete,
+  });
 
   final _SubjectSummary summary;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -418,6 +513,15 @@ class _SubjectCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(width: 8),
+            if (onDelete != null)
+              IconButton(
+                tooltip: 'Delete class',
+                onPressed: onDelete,
+                icon: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.tomatoRed,
+                ),
+              ),
             const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],
         ),

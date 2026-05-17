@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../data/classroom_store.dart';
 import '../../data/focus_queue_store.dart';
 import '../../data/task_store.dart';
 import '../shell/main_shell.dart';
@@ -225,6 +226,7 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
         onEditLocked: () => _showMessage('Only the task owner can edit this task.'),
         onToggleComplete: (done) async => _toggleTask(task.id, done),
         onAddToFocus: () => _addToFocus(task),
+        onDelete: () => _confirmDeleteTask(task),
       ),
     );
   }
@@ -327,6 +329,34 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
         );
       },
     );
+  }
+
+  Future<void> _confirmDeleteTask(TaskItem task) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${task.title}"?'),
+        content: const Text('This task will be removed permanently.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.tomatoRed),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await TaskStore.instance.deleteTask(task.id);
+    if (task.id.startsWith(ClassroomStore.taskIdPrefix)) {
+      await ClassroomStore.instance.untrackAssignment(
+        task.id.substring(ClassroomStore.taskIdPrefix.length),
+      );
+    }
   }
 
   void _showMessage(String message) {
