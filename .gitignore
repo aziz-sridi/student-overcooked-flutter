@@ -40,6 +40,22 @@ migrate_working_dir/
 /backend/__pycache__/
 /backend/.pytest_cache/
 
+# Local project notes and machine-specific tooling
+/PRODUCT.md
+/DESIGN.md
+/GOOGLE_CLASSROOM_SETUP.md
+/.claude/
+/search_jdks.ps1
+
+# Unused local Node workspace
+/node_modules/
+/package.json
+/package-lock.json
+
+# Local Firebase configuration and credentials
+/google-services.json
+/*firebase-adminsdk*.json
+
 # Symbolication related
 app.*.symbols
 
