@@ -12,7 +12,9 @@ import '../shop/shop_screen.dart';
 import 'project_workspace_screen.dart';
 
 class ProjectsScreen extends StatefulWidget {
-  const ProjectsScreen({super.key});
+  const ProjectsScreen({super.key, this.scrollController});
+
+  final ScrollController? scrollController;
 
   @override
   State<ProjectsScreen> createState() => _ProjectsScreenState();
@@ -31,6 +33,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         child: const Icon(Icons.add),
       ),
       body: CustomScrollView(
+        controller: widget.scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: SafeArea(
@@ -38,9 +41,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               child: AppTopBar(
                 title: 'Projects',
                 onShopTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ShopScreen()),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
                 },
               ),
             ),
@@ -60,9 +63,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           child: Text(
                             'No projects yet. Create one or join with an invite code.',
                             textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: AppColors.textSecondary),
                           ),
                         ),
                       );
@@ -79,7 +81,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => ProjectWorkspaceScreen(project: projectCards[index]),
+                              builder: (_) => ProjectWorkspaceScreen(
+                                project: projectCards[index],
+                              ),
                             ),
                           );
                         },
@@ -96,12 +100,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   ProjectItem _withTaskStats(ProjectItem project, List<TaskItem> allTasks) {
-    final scoped = allTasks.where((task) => task.projectId == project.id).toList();
+    final scoped = allTasks
+        .where((task) => task.projectId == project.id)
+        .toList();
     final done = scoped.where((task) => task.isDone).length;
     return project.copyWith(
       completedTasks: done,
       totalTasks: scoped.length,
-      teamCount: project.memberLabels.isEmpty ? project.teamCount : project.memberLabels.length,
+      teamCount: project.memberLabels.isEmpty
+          ? project.teamCount
+          : project.memberLabels.length,
     );
   }
 
@@ -164,15 +172,23 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 children: [
                   TextField(
                     controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Project title'),
+                    decoration: const InputDecoration(
+                      labelText: 'Project title',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: typeLabel,
                     decoration: const InputDecoration(labelText: 'Type'),
                     items: const [
-                      DropdownMenuItem(value: 'Team Project', child: Text('Team Project')),
-                      DropdownMenuItem(value: 'Individual', child: Text('Individual')),
+                      DropdownMenuItem(
+                        value: 'Team Project',
+                        child: Text('Team Project'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Individual',
+                        child: Text('Individual'),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value == null) {
@@ -186,17 +202,25 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     value: linkToSubject,
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Link this project to a subject'),
-                    onChanged: (value) => setLocalState(() => linkToSubject = value),
+                    onChanged: (value) =>
+                        setLocalState(() => linkToSubject = value),
                   ),
                   if (linkToSubject)
                     Column(
                       children: [
                         DropdownButtonFormField<String>(
-                          value: addingNewSubject ? newSubjectValue : selectedSubject,
-                          decoration: const InputDecoration(labelText: 'Subject'),
+                          initialValue: addingNewSubject
+                              ? newSubjectValue
+                              : selectedSubject,
+                          decoration: const InputDecoration(
+                            labelText: 'Subject',
+                          ),
                           items: [
                             for (final subject in subjects)
-                              DropdownMenuItem(value: subject, child: Text(subject)),
+                              DropdownMenuItem(
+                                value: subject,
+                                child: Text(subject),
+                              ),
                             const DropdownMenuItem(
                               value: newSubjectValue,
                               child: Text('Add new subject...'),
@@ -258,7 +282,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
 
     final subject = linkToSubject
-        ? (addingNewSubject ? subjectController.text.trim() : (selectedSubject ?? '').trim())
+        ? (addingNewSubject
+              ? subjectController.text.trim()
+              : (selectedSubject ?? '').trim())
         : '';
     if (linkToSubject && subject.isEmpty) {
       _showMessage('Subject is required when linking a project to a subject.');
@@ -341,7 +367,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   List<String> _subjectOptions() {

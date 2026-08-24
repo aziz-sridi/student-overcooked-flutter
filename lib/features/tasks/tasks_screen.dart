@@ -13,8 +13,17 @@ import '../shop/shop_screen.dart';
 import 'subject_tasks_detail_screen.dart';
 import 'task_editor_dialog.dart';
 
+class TasksScreenController {
+  VoidCallback? _resetForVisit;
+
+  void resetForVisit() => _resetForVisit?.call();
+}
+
 class TasksScreen extends StatefulWidget {
-  const TasksScreen({super.key});
+  const TasksScreen({super.key, this.scrollController, this.controller});
+
+  final ScrollController? scrollController;
+  final TasksScreenController? controller;
 
   @override
   State<TasksScreen> createState() => _TasksScreenState();
@@ -28,13 +37,32 @@ class _TasksScreenState extends State<TasksScreen> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._resetForVisit = _resetForVisit;
     _searchController.addListener(() {
-      setState(() => _searchQuery = _searchController.text.trim().toLowerCase());
+      setState(
+        () => _searchQuery = _searchController.text.trim().toLowerCase(),
+      );
     });
   }
 
   @override
+  void didUpdateWidget(covariant TasksScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._resetForVisit = null;
+      widget.controller?._resetForVisit = _resetForVisit;
+    }
+  }
+
+  void _resetForVisit() {
+    if (!_groupBySubject) {
+      setState(() => _groupBySubject = true);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.controller?._resetForVisit = null;
     _searchController.dispose();
     super.dispose();
   }
@@ -51,16 +79,17 @@ class _TasksScreenState extends State<TasksScreen> {
         child: const Icon(Icons.add),
       ),
       body: CustomScrollView(
+        controller: widget.scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: SafeArea(
               bottom: false,
               child: AppTopBar(
-                title: 'Tasks by Subject',
+                title: 'Tasks',
                 onShopTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ShopScreen()),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
                 },
               ),
             ),
@@ -87,11 +116,15 @@ class _TasksScreenState extends State<TasksScreen> {
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: AppColors.cardStroke),
+                        borderSide: const BorderSide(
+                          color: AppColors.cardStroke,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: AppColors.cardStroke),
+                        borderSide: const BorderSide(
+                          color: AppColors.cardStroke,
+                        ),
                       ),
                     ),
                   ),
@@ -101,13 +134,15 @@ class _TasksScreenState extends State<TasksScreen> {
                       ChoiceChip(
                         label: const Text('Grouped'),
                         selected: _groupBySubject,
-                        onSelected: (_) => setState(() => _groupBySubject = true),
+                        onSelected: (_) =>
+                            setState(() => _groupBySubject = true),
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
                         label: const Text('All Tasks'),
                         selected: !_groupBySubject,
-                        onSelected: (_) => setState(() => _groupBySubject = false),
+                        onSelected: (_) =>
+                            setState(() => _groupBySubject = false),
                       ),
                     ],
                   ),
@@ -128,9 +163,8 @@ class _TasksScreenState extends State<TasksScreen> {
                                 syncState.message!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: AppColors.textSecondary),
                               ),
                             ),
                           ],
@@ -153,29 +187,42 @@ class _TasksScreenState extends State<TasksScreen> {
                     return ValueListenableBuilder<List<String>>(
                       valueListenable: SubjectStore.instance.subjects,
                       builder: (context, knownSubjects, _) {
-                        final syncedTasks = storedTasks.map(focusStore.applyFocusState).toList();
+                        final syncedTasks = storedTasks
+                            .map(focusStore.applyFocusState)
+                            .toList();
                         final filteredTasks = _filterTasks(syncedTasks);
-                        final subjects = _buildSubjectSummaries(filteredTasks, knownSubjects);
+                        final subjects = _buildSubjectSummaries(
+                          filteredTasks,
+                          knownSubjects,
+                        );
                         final sortedFlatTasks = [...filteredTasks]
-                          ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
+                          ..sort(
+                            (a, b) => b.urgencyScore.compareTo(a.urgencyScore),
+                          );
 
                         final showLoading =
-                            syncState.status == TaskSyncStatus.loading && storedTasks.isEmpty;
+                            syncState.status == TaskSyncStatus.loading &&
+                            storedTasks.isEmpty;
                         final showError =
-                            syncState.status == TaskSyncStatus.error && storedTasks.isEmpty;
+                            syncState.status == TaskSyncStatus.error &&
+                            storedTasks.isEmpty;
 
                         return SliverList.builder(
                           itemCount: showLoading || showError
                               ? 1
                               : _groupBySubject
-                                  ? (subjects.isEmpty ? 1 : subjects.length)
-                                  : (sortedFlatTasks.isEmpty ? 1 : sortedFlatTasks.length),
+                              ? (subjects.isEmpty ? 1 : subjects.length)
+                              : (sortedFlatTasks.isEmpty
+                                    ? 1
+                                    : sortedFlatTasks.length),
                           itemBuilder: (context, index) {
                             if (showLoading) {
                               return const _LoadingTaskState();
                             }
                             if (showError) {
-                              return _SyncErrorState(onRetry: TaskStore.instance.retrySync);
+                              return _SyncErrorState(
+                                onRetry: TaskStore.instance.retrySync,
+                              );
                             }
 
                             if (_groupBySubject && subjects.isEmpty) {
@@ -200,7 +247,9 @@ class _TasksScreenState extends State<TasksScreen> {
                               task: task,
                               canEdit: TaskStore.instance.canEdit(task),
                               onEdit: () => _editTask(task),
-                              onEditLocked: () => _showSoon('Only the task owner can edit this task.'),
+                              onEditLocked: () => _showSoon(
+                                'Only the task owner can edit this task.',
+                              ),
                               onToggleComplete: (done) async {
                                 await _toggleTask(task.id, done);
                               },
@@ -224,9 +273,7 @@ class _TasksScreenState extends State<TasksScreen> {
   Future<void> _openSubject(String subject) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => SubjectTasksDetailScreen(
-          subject: subject,
-        ),
+        builder: (_) => SubjectTasksDetailScreen(subject: subject),
       ),
     );
   }
@@ -373,7 +420,9 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   void _showSoon(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -385,7 +434,11 @@ class _SubjectSummary {
 
   int get totalTasks => tasks.length;
 
-  int get projectCount => tasks.where((task) => task.hasProject).map((task) => task.projectId).toSet().length;
+  int get projectCount => tasks
+      .where((task) => task.hasProject)
+      .map((task) => task.projectId)
+      .toSet()
+      .length;
 
   DateTime get nextDue {
     final pending = tasks.where((task) => !task.isDone).toList();
@@ -450,16 +503,16 @@ class _SubjectCard extends StatelessWidget {
                   Text(
                     summary.subject,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     '${summary.totalTasks} task${summary.totalTasks == 1 ? '' : 's'}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Row(
@@ -467,7 +520,9 @@ class _SubjectCard extends StatelessWidget {
                       Icon(
                         Icons.calendar_today_rounded,
                         size: 14,
-                        color: summary.isUrgent ? AppColors.tomatoRed : AppColors.textSecondary,
+                        color: summary.isUrgent
+                            ? AppColors.tomatoRed
+                            : AppColors.textSecondary,
                       ),
                       const SizedBox(width: 4),
                       Expanded(
@@ -475,9 +530,14 @@ class _SubjectCard extends StatelessWidget {
                           summary.nextDueLabel,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: summary.isUrgent ? AppColors.tomatoRed : AppColors.textSecondary,
-                                fontWeight: summary.isUrgent ? FontWeight.w800 : FontWeight.w600,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: summary.isUrgent
+                                    ? AppColors.tomatoRed
+                                    : AppColors.textSecondary,
+                                fontWeight: summary.isUrgent
+                                    ? FontWeight.w800
+                                    : FontWeight.w600,
                               ),
                         ),
                       ),
@@ -505,9 +565,9 @@ class _SubjectCard extends StatelessWidget {
                     Text(
                       '${summary.projectCount}',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppColors.statusInProgress,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        color: AppColors.statusInProgress,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
@@ -522,7 +582,10 @@ class _SubjectCard extends StatelessWidget {
                   color: AppColors.tomatoRed,
                 ),
               ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary,
+            ),
           ],
         ),
       ),
@@ -548,16 +611,16 @@ class _EmptyTaskState extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'No tasks yet',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 6),
             Text(
               'Create your first task to get started.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -592,13 +655,17 @@ class _SyncErrorState extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 36),
         child: Column(
           children: [
-            const Icon(Icons.cloud_off_rounded, color: AppColors.tomatoRed, size: 28),
+            const Icon(
+              Icons.cloud_off_rounded,
+              color: AppColors.tomatoRed,
+              size: 28,
+            ),
             const SizedBox(height: 8),
             Text(
               'Could not sync tasks right now.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(

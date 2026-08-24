@@ -13,15 +13,13 @@ import 'task_editor_dialog.dart';
 enum _TaskFilter { all, dueSoon, overdue, done }
 
 class SubjectTasksDetailScreen extends StatefulWidget {
-  const SubjectTasksDetailScreen({
-    super.key,
-    required this.subject,
-  });
+  const SubjectTasksDetailScreen({super.key, required this.subject});
 
   final String subject;
 
   @override
-  State<SubjectTasksDetailScreen> createState() => _SubjectTasksDetailScreenState();
+  State<SubjectTasksDetailScreen> createState() =>
+      _SubjectTasksDetailScreenState();
 }
 
 class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
@@ -49,11 +47,26 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
           unselectedItemColor: AppColors.textSecondary,
           onTap: _goToTab,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.timer_rounded), label: 'Focus'),
-            BottomNavigationBarItem(icon: Icon(Icons.task_rounded), label: 'Tasks'),
-            BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.folder_rounded), label: 'Projects'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.timer_rounded),
+              label: 'Focus',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.task_rounded),
+              label: 'Tasks',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.folder_rounded),
+              label: 'Projects',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
           ],
         ),
         body: CustomScrollView(
@@ -86,9 +99,8 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
                               syncState.message!,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: AppColors.textSecondary),
                             ),
                           ),
                         ],
@@ -110,58 +122,74 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
                           .tasksForSubject(widget.subject, onlyMine: true)
                           .map(FocusQueueStore.instance.applyFocusState)
                           .toList();
-                      final visibleTasks = _filteredAndSortedTasks(subjectTasks);
-                      final projectTasks = visibleTasks.where((task) => task.hasProject).toList();
-                      final classTasks = visibleTasks.where((task) => !task.hasProject).toList();
+                      final visibleTasks = _filteredAndSortedTasks(
+                        subjectTasks,
+                      );
+                      final projectTasks = visibleTasks
+                          .where((task) => task.hasProject)
+                          .toList();
+                      final classTasks = visibleTasks
+                          .where((task) => !task.hasProject)
+                          .toList();
 
                       final showLoading =
-                          syncState.status == TaskSyncStatus.loading && tasks.isEmpty;
-                      final showError = syncState.status == TaskSyncStatus.error && tasks.isEmpty;
+                          syncState.status == TaskSyncStatus.loading &&
+                          tasks.isEmpty;
+                      final showError =
+                          syncState.status == TaskSyncStatus.error &&
+                          tasks.isEmpty;
 
                       return SliverList(
-                        delegate: SliverChildListDelegate(
-                          [
-                            _SummaryCard(
-                              tasks: subjectTasks,
-                              onStartFocus: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Focus session started for this subject.')),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 14),
-                            _FilterRow(
-                              selectedFilter: _selectedFilter,
-                              onChanged: (filter) => setState(() => _selectedFilter = filter),
-                            ),
-                            const SizedBox(height: 10),
-                            if (showLoading)
-                              const _LoadingState()
-                            else if (showError)
-                              _SyncErrorState(onRetry: TaskStore.instance.retrySync)
-                            else if (visibleTasks.isEmpty)
-                              const _EmptyState()
-                            else ...[
-                              if (projectTasks.isNotEmpty) ...[
-                                _TaskSectionHeader(
-                                  title: 'Projects',
-                                  icon: Icons.folder_open_rounded,
+                        delegate: SliverChildListDelegate([
+                          _SummaryCard(
+                            tasks: subjectTasks,
+                            onStartFocus: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Focus session started for this subject.',
+                                  ),
                                 ),
-                                const SizedBox(height: 8),
-                                for (final task in projectTasks) _buildTaskItem(task),
-                                const SizedBox(height: 8),
-                              ],
-                              if (classTasks.isNotEmpty) ...[
-                                _TaskSectionHeader(
-                                  title: 'Class',
-                                  icon: Icons.school_rounded,
-                                ),
-                                const SizedBox(height: 8),
-                                for (final task in classTasks) _buildTaskItem(task),
-                              ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                          _FilterRow(
+                            selectedFilter: _selectedFilter,
+                            onChanged: (filter) =>
+                                setState(() => _selectedFilter = filter),
+                          ),
+                          const SizedBox(height: 10),
+                          if (showLoading)
+                            const _LoadingState()
+                          else if (showError)
+                            _SyncErrorState(
+                              onRetry: TaskStore.instance.retrySync,
+                            )
+                          else if (visibleTasks.isEmpty)
+                            const _EmptyState()
+                          else ...[
+                            if (projectTasks.isNotEmpty) ...[
+                              _TaskSectionHeader(
+                                title: 'Projects',
+                                icon: Icons.folder_open_rounded,
+                              ),
+                              const SizedBox(height: 8),
+                              for (final task in projectTasks)
+                                _buildTaskItem(task),
+                              const SizedBox(height: 8),
+                            ],
+                            if (classTasks.isNotEmpty) ...[
+                              _TaskSectionHeader(
+                                title: 'Class',
+                                icon: Icons.school_rounded,
+                              ),
+                              const SizedBox(height: 8),
+                              for (final task in classTasks)
+                                _buildTaskItem(task),
                             ],
                           ],
-                        ),
+                        ]),
                       );
                     },
                   );
@@ -191,9 +219,14 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
   Widget _buildTaskItem(TaskItem task) {
     return Dismissible(
       key: ValueKey(task.id),
-      direction: task.isDone ? DismissDirection.none : DismissDirection.endToStart,
+      direction: task.isDone
+          ? DismissDirection.none
+          : DismissDirection.endToStart,
       confirmDismiss: (_) async {
-        await _markTaskComplete(task.id);
+        final confirmed = await _confirmMarkComplete(task);
+        if (confirmed) {
+          await _markTaskComplete(task.id);
+        }
         return false;
       },
       background: Container(
@@ -223,7 +256,8 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
         task: task,
         canEdit: TaskStore.instance.canEdit(task),
         onEdit: () => _editTask(task),
-        onEditLocked: () => _showMessage('Only the task owner can edit this task.'),
+        onEditLocked: () =>
+            _showMessage('Only the task owner can edit this task.'),
         onToggleComplete: (done) async => _toggleTask(task.id, done),
         onAddToFocus: () => _addToFocus(task),
         onDelete: () => _confirmDeleteTask(task),
@@ -241,9 +275,35 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task marked as complete.')),
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task marked as complete.')));
+  }
+
+  Future<bool> _confirmMarkComplete(TaskItem task) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.task_alt_rounded, color: AppColors.burntOrange),
+        title: const Text('Mark this task complete?'),
+        content: Text(
+          '“${task.title}” will move to your completed tasks.',
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Mark complete'),
+          ),
+        ],
+      ),
     );
+    return confirmed ?? false;
   }
 
   void _addToFocus(TaskItem task) {
@@ -319,7 +379,9 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
                   onTap: () {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(this.context).showSnackBar(
-                      const SnackBar(content: Text('Project creation flow coming next.')),
+                      const SnackBar(
+                        content: Text('Project creation flow coming next.'),
+                      ),
                     );
                   },
                 ),
@@ -360,7 +422,9 @@ class _SubjectTasksDetailScreenState extends State<SubjectTasksDetailScreen> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -374,14 +438,15 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = tasks.length;
     final done = tasks.where((task) => task.isDone).length;
-    final closest = tasks
-        .where((task) => !task.isDone)
-        .fold<TaskItem?>(null, (best, task) {
-          if (best == null || task.dueAt.isBefore(best.dueAt)) {
-            return task;
-          }
-          return best;
-        });
+    final closest = tasks.where((task) => !task.isDone).fold<TaskItem?>(null, (
+      best,
+      task,
+    ) {
+      if (best == null || task.dueAt.isBefore(best.dueAt)) {
+        return task;
+      }
+      return best;
+    });
 
     final progress = total == 0 ? 0.0 : done / total;
 
@@ -402,16 +467,17 @@ class _SummaryCard extends StatelessWidget {
               _Metric(
                 title: 'Closest',
                 value: closest == null ? 'Done' : closest.deadlineLabel,
-                warning: closest?.isOverdue == true || closest?.isDueSoon == true,
+                warning:
+                    closest?.isOverdue == true || closest?.isDueSoon == true,
               ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             'Progress ${(progress * 100).toStringAsFixed(0)}%',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           ClipRRect(
@@ -462,9 +528,9 @@ class _DetailTopBar extends StatelessWidget {
             child: Text(
               title,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 24,
-                  ),
+                fontWeight: FontWeight.w800,
+                fontSize: 24,
+              ),
             ),
           ),
         ],
@@ -474,7 +540,11 @@ class _DetailTopBar extends StatelessWidget {
 }
 
 class _Metric extends StatelessWidget {
-  const _Metric({required this.title, required this.value, this.warning = false});
+  const _Metric({
+    required this.title,
+    required this.value,
+    this.warning = false,
+  });
 
   final String title;
   final String value;
@@ -488,9 +558,9 @@ class _Metric extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 2),
           Text(
@@ -498,9 +568,9 @@ class _Metric extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: warning ? AppColors.tomatoRed : AppColors.textPrimary,
-                  fontWeight: FontWeight.w800,
-                ),
+              color: warning ? AppColors.tomatoRed : AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -579,9 +649,9 @@ class _TaskSectionHeader extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
       ],
     );
@@ -598,9 +668,9 @@ class _EmptyState extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         'No tasks in this filter.',
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.textSecondary,
-            ),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
       ),
     );
   }
@@ -634,9 +704,9 @@ class _SyncErrorState extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Unable to sync this subject right now.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(

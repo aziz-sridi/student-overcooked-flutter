@@ -15,7 +15,10 @@ class NotificationSettingsScreen extends StatelessWidget {
           valueListenable: NotificationStore.instance.enabled,
           builder: (context, enabled, _) {
             return ListTile(
-              leading: const Icon(Icons.notifications_outlined, color: AppColors.burntOrange),
+              leading: const Icon(
+                Icons.notifications_outlined,
+                color: AppColors.burntOrange,
+              ),
               title: const Text('Enable notifications'),
               trailing: Switch(
                 value: enabled,

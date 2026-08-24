@@ -1,11 +1,11 @@
 {
-    "name": "studentovercoocked",
-    "short_name": "studentovercoocked",
+    "name": "Student Overcooked",
+    "short_name": "Overcooked",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFF5E1",
+    "theme_color": "#FF6B35",
+    "description": "A playful student task and focus companion.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

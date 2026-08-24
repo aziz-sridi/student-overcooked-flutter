@@ -24,7 +24,9 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Failed to send verification email.')),
+        SnackBar(
+          content: Text(e.message ?? 'Failed to send verification email.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

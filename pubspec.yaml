@@ -1,5 +1,5 @@
 name: studentovercoocked
-description: "A new Flutter project."
+description: "A playful student task and focus companion."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -46,6 +46,8 @@ dependencies:
   audioplayers: ^6.1.0
   path_provider: ^2.1.4
   flutter_markdown: ^0.7.4
+  flutter_local_notifications: ^22.3.0
+  timezone: ^0.11.1
 
 dev_dependencies:
   flutter_test:
@@ -57,6 +59,28 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  image: ^4.9.0
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/student_cooked_icon.png"
+  adaptive_icon_background: "#FFF5E1"
+  adaptive_icon_foreground: "assets/icon/student_cooked_foreground.png"
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: "assets/icon/student_cooked_icon.png"
+    background_color: "#FFF5E1"
+    theme_color: "#FF6B35"
+  windows:
+    generate: true
+    image_path: "assets/icon/student_cooked_icon.png"
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/icon/student_cooked_icon.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

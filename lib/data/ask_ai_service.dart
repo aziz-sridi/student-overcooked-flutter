@@ -42,7 +42,11 @@ class AskAiService {
     try {
       final data = jsonDecode(response.body);
       if (data is Map<String, dynamic>) {
-        final answer = data['answer'] ?? data['text'] ?? data['message'] ?? data['response'];
+        final answer =
+            data['answer'] ??
+            data['text'] ??
+            data['message'] ??
+            data['response'];
         if (answer is String && answer.trim().isNotEmpty) {
           return answer.trim();
         }

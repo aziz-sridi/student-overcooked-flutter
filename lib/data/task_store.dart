@@ -50,7 +50,12 @@ class TaskStore {
   List<TaskItem> get workNowTasks {
     final items =
         tasks
-            .where((task) => isCurrentUserLabel(task.assignee) && !task.hasProject && !task.isDone)
+            .where(
+              (task) =>
+                  isCurrentUserLabel(task.assignee) &&
+                  !task.hasProject &&
+                  !task.isDone,
+            )
             .toList()
           ..sort((a, b) => b.urgencyScore.compareTo(a.urgencyScore));
     return items.take(3).toList();
@@ -187,12 +192,21 @@ class TaskStore {
     required String taskId,
     required bool done,
   }) async {
-    await _projectTaskCollection(projectId).doc(taskId).set({
+    final reference = _projectTaskCollection(projectId).doc(taskId);
+    var wasDone = false;
+    try {
+      final snapshot = await reference.get();
+      final data = snapshot.data();
+      wasDone =
+          data?['completed'] == true || data?['state'] == TaskState.done.name;
+    } catch (_) {
+      // Completion still works offline; Firestore will sync the write later.
+    }
+    await reference.set({
       'state': done ? TaskState.done.name : TaskState.notStarted.name,
       'completed': done,
     }, SetOptions(merge: true));
-    // Award coins when project task is marked complete
-    if (done) {
+    if (done && !wasDone) {
       await MascotStore.instance.addCoins(50);
     }
   }
@@ -216,8 +230,7 @@ class TaskStore {
         completed: done,
       ),
     );
-    // Award coins when task is marked complete
-    if (done) {
+    if (done && !existing.isDone) {
       await MascotStore.instance.addCoins(50);
     }
   }

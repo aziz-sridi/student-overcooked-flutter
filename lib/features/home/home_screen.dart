@@ -13,7 +13,9 @@ import '../shop/shop_screen.dart';
 import '../tasks/task_editor_dialog.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.scrollController});
+
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +27,7 @@ class HomeScreen extends StatelessWidget {
         child: const Icon(Icons.add),
       ),
       body: CustomScrollView(
+        controller: scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: SafeArea(
@@ -32,9 +35,9 @@ class HomeScreen extends StatelessWidget {
               child: AppTopBar(
                 title: 'Student Overcooked',
                 onShopTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ShopScreen()),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
                 },
               ),
             ),
@@ -42,72 +45,78 @@ class HomeScreen extends StatelessWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
             sliver: SliverList(
-              delegate: SliverChildListDelegate(
-                [
-                  _CookedMeterCard(),
-                  const SizedBox(height: 24),
-                  _SectionHeader(title: 'Quick Stats'),
-                  const SizedBox(height: 12),
-                  ValueListenableBuilder<List<TaskItem>>(
-                    valueListenable: TaskStore.instance.tasksNotifier,
-                    builder: (context, tasks, _) {
-                      return ValueListenableBuilder<MascotState>(
-                        valueListenable: MascotStore.instance.state,
-                        builder: (context, mascotState, _) {
-                          final stats = _buildQuickStats(_ownedTasks(tasks));
-                          return SizedBox(
-                            height: 142,
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: stats.length,
-                              itemBuilder: (context, index) =>
-                                  QuickStatCard(item: stats[index]),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  const _SectionHeader(title: 'Work Now', actionText: 'View All'),
-                  const SizedBox(height: 12),
-                  ValueListenableBuilder<List<TaskItem>>(
-                    valueListenable: TaskStore.instance.tasksNotifier,
-                    builder: (context, tasksValue, child) {
-                      final tasks = TaskStore.instance.workNowTasks;
-                      if (tasks.isEmpty) {
-                        return Text(
-                          'No tasks yet. Add your first quick task.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textSecondary,
-                              ),
+              delegate: SliverChildListDelegate([
+                _CookedMeterCard(),
+                const SizedBox(height: 24),
+                _SectionHeader(title: 'Quick Stats'),
+                const SizedBox(height: 12),
+                ValueListenableBuilder<List<TaskItem>>(
+                  valueListenable: TaskStore.instance.tasksNotifier,
+                  builder: (context, tasks, _) {
+                    return ValueListenableBuilder<MascotState>(
+                      valueListenable: MascotStore.instance.state,
+                      builder: (context, mascotState, _) {
+                        final stats = _buildQuickStats(_ownedTasks(tasks));
+                        return SizedBox(
+                          height: 142,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: stats.length,
+                            itemBuilder: (context, index) =>
+                                QuickStatCard(item: stats[index]),
+                          ),
                         );
-                      }
-
-                      return Column(
-                        children: [
-                          for (final task in tasks)
-                            TaskCard(
-                              task: FocusQueueStore.instance.applyFocusState(task),
-                              compact: true,
-                              canEdit: TaskStore.instance.canEdit(task),
-                              onEdit: () => _editTask(context, task),
-                              onEditLocked: () => _showMessage(
-                                context,
-                                'Only the task owner can edit this task.',
-                              ),
-                              onAddToFocus: () => _addToFocus(context, task),
-                              onToggleComplete: (done) async {
-                                await TaskStore.instance.setCompletion(task.id, done);
-                                FocusQueueStore.instance.markTaskCompletion(task.id, done);
-                              },
-                            ),
-                        ],
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                const _SectionHeader(title: 'Work Now', actionText: 'View All'),
+                const SizedBox(height: 12),
+                ValueListenableBuilder<List<TaskItem>>(
+                  valueListenable: TaskStore.instance.tasksNotifier,
+                  builder: (context, tasksValue, child) {
+                    final tasks = TaskStore.instance.workNowTasks;
+                    if (tasks.isEmpty) {
+                      return Text(
+                        'No tasks yet. Add your first quick task.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       );
-                    },
-                  ),
-                ],
-              ),
+                    }
+
+                    return Column(
+                      children: [
+                        for (final task in tasks)
+                          TaskCard(
+                            task: FocusQueueStore.instance.applyFocusState(
+                              task,
+                            ),
+                            compact: true,
+                            canEdit: TaskStore.instance.canEdit(task),
+                            onEdit: () => _editTask(context, task),
+                            onEditLocked: () => _showMessage(
+                              context,
+                              'Only the task owner can edit this task.',
+                            ),
+                            onAddToFocus: () => _addToFocus(context, task),
+                            onToggleComplete: (done) async {
+                              await TaskStore.instance.setCompletion(
+                                task.id,
+                                done,
+                              );
+                              FocusQueueStore.instance.markTaskCompletion(
+                                task.id,
+                                done,
+                              );
+                            },
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ]),
             ),
           ),
         ],
@@ -178,7 +187,10 @@ class HomeScreen extends StatelessWidget {
                   subtitle: const Text('Start a new project workspace'),
                   onTap: () {
                     Navigator.pop(context);
-                    _showMessage(context, 'Quick project creation is coming next.');
+                    _showMessage(
+                      context,
+                      'Quick project creation is coming next.',
+                    );
                   },
                 ),
               ],
@@ -209,7 +221,9 @@ class HomeScreen extends StatelessWidget {
   }
 
   void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -225,18 +239,18 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
         const Spacer(),
         if (actionText != null)
           Text(
             actionText!,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.burntOrange,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: AppColors.burntOrange,
+              fontWeight: FontWeight.w700,
+            ),
           ),
       ],
     );
@@ -270,7 +284,9 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                 if (!mounted) {
                   return;
                 }
-                if ((MascotStore.instance.state.value.cookedMeter - meter.value).abs() > 0.1) {
+                if ((MascotStore.instance.state.value.cookedMeter - meter.value)
+                        .abs() >
+                    0.1) {
                   MascotStore.instance.setCookedMeter(meter.value);
                 }
               });
@@ -281,34 +297,39 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outlineVariant.withValues(alpha: 0.45),
+                ),
               ),
               child: Column(
                 children: [
                   Text(
                     meter.stageLabel,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: stageColor,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: stageColor,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   const SizedBox(height: 14),
-                  Container(
+                  SizedBox(
                     width: 120,
                     height: 120,
-                    alignment: Alignment.center,
                     child: Image.asset(
                       mascotState.imageAssetPath,
                       fit: BoxFit.contain,
                     ),
                   ),
                   const SizedBox(height: 14),
-                  FilledButton(
+                  FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.burntOrange,
                       foregroundColor: AppColors.white,
                     ),
                     onPressed: () => _showOwnedMascotsPicker(context),
-                    child: const Text('Change mascot'),
+                    icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                    label: const Text('Change mascot'),
                   ),
                   const SizedBox(height: 16),
                   ClipRRect(
@@ -325,16 +346,21 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                     children: [
                       Text(
                         '${meter.value.toStringAsFixed(0)}%',
-                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                            ),
+                        style: Theme.of(context).textTheme.displaySmall
+                            ?.copyWith(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                            '${mascotState.mascotLabel} is currently ${meter.stageLabel.toLowerCase()} based on your live task progress.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppColors.textSecondary,
+                          meter.summary,
+                          textAlign: TextAlign.left,
+                          maxLines: 2,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w700,
                               ),
                         ),
                       ),
@@ -354,12 +380,22 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
         .where((task) => TaskStore.instance.isCurrentUserLabel(task.assignee))
         .toList();
     if (tasks.isEmpty) {
-      return const _CookedMeterSnapshot(value: 25, stage: CookedStage.cozy);
+      return const _CookedMeterSnapshot(
+        value: 25,
+        stage: CookedStage.cozy,
+        done: 0,
+        total: 0,
+        overdue: 0,
+      );
     }
 
     final total = tasks.length;
-    final done = tasks.where((task) => task.state == TaskState.done || task.completed).length;
-    final inProgress = tasks.where((task) => task.state == TaskState.inProgress).length;
+    final done = tasks
+        .where((task) => task.state == TaskState.done || task.completed)
+        .length;
+    final inProgress = tasks
+        .where((task) => task.state == TaskState.inProgress)
+        .length;
     final overdue = tasks.where((task) => task.isOverdue).length;
     final dueSoon = tasks.where((task) => task.isDueSoon).length;
 
@@ -369,10 +405,17 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
     final urgencyBonus = (inProgress / total) * 12;
     final overduePenalty = overdue * 18;
     final dueSoonPenalty = dueSoon * 6;
-    final raw = incompleteScore + urgencyBonus + overduePenalty + dueSoonPenalty + 20;
+    final raw =
+        incompleteScore + urgencyBonus + overduePenalty + dueSoonPenalty + 20;
     final value = raw.clamp(0, 100).toDouble();
 
-    return _CookedMeterSnapshot(value: value, stage: _stageForValue(value));
+    return _CookedMeterSnapshot(
+      value: value,
+      stage: _stageForValue(value),
+      done: done,
+      total: total,
+      overdue: overdue,
+    );
   }
 
   CookedStage _stageForValue(double value) {
@@ -420,9 +463,8 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                         Expanded(
                           child: Text(
                             'My Mascots',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
                           ),
                         ),
                         IconButton(
@@ -435,8 +477,8 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                     Text(
                       'Tap a mascot to equip it.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     if (owned.isEmpty)
@@ -454,11 +496,11 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                         itemCount: owned.length,
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 10,
-                          crossAxisSpacing: 10,
-                          childAspectRatio: 0.78,
-                        ),
+                              crossAxisCount: 3,
+                              mainAxisSpacing: 10,
+                              crossAxisSpacing: 10,
+                              childAspectRatio: 0.78,
+                            ),
                         itemBuilder: (context, index) {
                           final kind = owned[index];
                           final isSelected = kind == mascotState.kind;
@@ -489,8 +531,9 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                                     child: Image.asset(
                                       mascotKindAsset(kind),
                                       fit: BoxFit.contain,
-                                      errorBuilder: (_, __, ___) =>
-                                          const Icon(Icons.pets_rounded),
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              const Icon(Icons.pets_rounded),
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -499,9 +542,7 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
+                                    style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
                                           fontWeight: FontWeight.w700,
                                           color: isSelected
@@ -543,10 +584,27 @@ class _CookedMeterCardState extends State<_CookedMeterCard> {
 }
 
 class _CookedMeterSnapshot {
-  const _CookedMeterSnapshot({required this.value, required this.stage});
+  const _CookedMeterSnapshot({
+    required this.value,
+    required this.stage,
+    required this.done,
+    required this.total,
+    required this.overdue,
+  });
 
   final double value;
   final CookedStage stage;
+  final int done;
+  final int total;
+  final int overdue;
+
+  String get summary {
+    if (total == 0) return 'Add your first task';
+    final remaining = total - done;
+    if (remaining == 0) return 'All tasks complete';
+    if (overdue > 0) return '$remaining left • $overdue overdue';
+    return '$done of $total done';
+  }
 
   String get stageLabel {
     return switch (stage) {

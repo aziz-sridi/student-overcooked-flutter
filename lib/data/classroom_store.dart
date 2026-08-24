@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -14,11 +15,7 @@ const String _webGoogleClientId =
     '888637651520-4115251u0gqb3sd7b5a2vrgqtq0kigkm.apps.googleusercontent.com';
 
 class ClassroomCourse {
-  const ClassroomCourse({
-    required this.id,
-    required this.name,
-    this.section,
-  });
+  const ClassroomCourse({required this.id, required this.name, this.section});
 
   final String id;
   final String name;
@@ -109,8 +106,9 @@ class ClassroomStore {
 
   static final ClassroomStore instance = ClassroomStore._();
 
-  final ValueNotifier<ClassroomState> state =
-      ValueNotifier<ClassroomState>(ClassroomState.signedOut());
+  final ValueNotifier<ClassroomState> state = ValueNotifier<ClassroomState>(
+    ClassroomState.signedOut(),
+  );
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: kIsWeb ? _webGoogleClientId : null,
@@ -138,8 +136,18 @@ class ClassroomStore {
     _initialized = true;
     await _loadImportedIds();
     AuthStore.instance.user.addListener(() {
-      _loadImportedIds();
+      unawaited(_handleAuthChanged());
     });
+    await _handleAuthChanged();
+  }
+
+  Future<void> _handleAuthChanged() async {
+    await _loadImportedIds();
+    if (AuthStore.instance.user.value == null) {
+      _account = null;
+      state.value = _signedOutState();
+      return;
+    }
     await refresh();
   }
 
@@ -165,8 +173,16 @@ class ClassroomStore {
   Future<void> connect() async {
     _setLoading(true);
     try {
-      _account = await _googleSignIn.signIn();
-      await refresh();
+      final account = await _googleSignIn.signIn();
+      if (account == null) {
+        state.value = _signedOutState(
+          message:
+              'Connection cancelled. Your existing tasks were not changed.',
+        );
+        return;
+      }
+      _account = account;
+      await _refreshWithAccount(account);
     } catch (error) {
       _setError(error.toString());
     } finally {
@@ -175,9 +191,22 @@ class ClassroomStore {
   }
 
   Future<void> disconnect() async {
-    await _googleSignIn.disconnect();
-    _account = null;
-    state.value = ClassroomState.signedOut();
+    try {
+      await _googleSignIn.disconnect();
+    } catch (_) {
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {
+        // The local Classroom session is cleared even if Google is unreachable.
+      }
+    } finally {
+      _account = null;
+      state.value = _signedOutState();
+    }
+  }
+
+  Future<void> clearSession() async {
+    await disconnect();
   }
 
   Future<void> refresh() async {
@@ -185,41 +214,72 @@ class ClassroomStore {
     try {
       _account ??= await _googleSignIn.signInSilently();
       if (_account == null) {
-        state.value = ClassroomState.signedOut().copyWith(
-          importedCourseIds: state.value.importedCourseIds,
-          importedAssignmentIds: state.value.importedAssignmentIds,
-        );
+        state.value = _signedOutState();
         return;
       }
-
-      final headers = await _account!.authHeaders;
-      final courses = await _fetchCourses(headers);
-      final assignments = <ClassroomAssignment>[];
-
-      for (final course in courses) {
-        final courseAssignments = await _fetchAssignments(course, headers);
-        assignments.addAll(courseAssignments);
+      await _refreshWithAccount(_account!);
+    } on _ClassroomApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        try {
+          final refreshed = await _googleSignIn.signInSilently(
+            reAuthenticate: true,
+          );
+          if (refreshed != null) {
+            _account = refreshed;
+            await _refreshWithAccount(refreshed);
+            return;
+          }
+        } catch (_) {
+          // Fall through to the reconnect state below.
+        }
+        _account = null;
+        state.value = _signedOutState(
+          message:
+              'Your Classroom session expired. Reconnect to continue syncing.',
+        );
+      } else {
+        _setError(error.message);
       }
-
-      assignments.sort((a, b) {
-        final aDue = a.dueAt ?? DateTime(9999);
-        final bDue = b.dueAt ?? DateTime(9999);
-        return aDue.compareTo(bDue);
-      });
-
-      state.value = ClassroomState(
-        isLoading: false,
-        isConnected: true,
-        courses: courses,
-        assignments: assignments,
-        importedCourseIds: state.value.importedCourseIds,
-        importedAssignmentIds: state.value.importedAssignmentIds,
-      );
     } catch (error) {
-      _setError(error.toString());
+      _setError(
+        'Could not refresh Classroom. Check your connection and try again.',
+      );
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<void> _refreshWithAccount(GoogleSignInAccount account) async {
+    final headers = await account.authHeaders;
+    final courses = await _fetchCourses(headers);
+    final assignments = <ClassroomAssignment>[];
+
+    for (final course in courses) {
+      assignments.addAll(await _fetchAssignments(course, headers));
+    }
+
+    assignments.sort((a, b) {
+      final aDue = a.dueAt ?? DateTime(9999);
+      final bDue = b.dueAt ?? DateTime(9999);
+      return aDue.compareTo(bDue);
+    });
+
+    state.value = ClassroomState(
+      isLoading: false,
+      isConnected: true,
+      courses: courses,
+      assignments: assignments,
+      importedCourseIds: state.value.importedCourseIds,
+      importedAssignmentIds: state.value.importedAssignmentIds,
+    );
+  }
+
+  ClassroomState _signedOutState({String? message}) {
+    return ClassroomState.signedOut().copyWith(
+      importedCourseIds: state.value.importedCourseIds,
+      importedAssignmentIds: state.value.importedAssignmentIds,
+      errorMessage: message,
+    );
   }
 
   Future<void> untrackCourseByName(String name) async {
@@ -234,10 +294,7 @@ class ClassroomStore {
     final updated = current.importedCourseIds.difference(matchingIds);
     if (updated.length == current.importedCourseIds.length) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _courseStorageKey(_activeUid),
-      updated.toList(),
-    );
+    await prefs.setStringList(_courseStorageKey(_activeUid), updated.toList());
     state.value = current.copyWith(importedCourseIds: updated);
   }
 
@@ -292,7 +349,8 @@ class ClassroomStore {
           id: '$_taskIdPrefix$id',
           title: assignment.title,
           subject: assignment.courseName,
-          dueAt: assignment.dueAt ?? DateTime.now().add(const Duration(days: 7)),
+          dueAt:
+              assignment.dueAt ?? DateTime.now().add(const Duration(days: 7)),
           priority: TaskPriority.medium,
           state: TaskState.notStarted,
         ),
@@ -318,7 +376,9 @@ class ClassroomStore {
     );
   }
 
-  Future<List<ClassroomCourse>> _fetchCourses(Map<String, String> headers) async {
+  Future<List<ClassroomCourse>> _fetchCourses(
+    Map<String, String> headers,
+  ) async {
     final attempts = <Uri>[
       Uri.parse(
         'https://classroom.googleapis.com/v1/courses'
@@ -334,13 +394,18 @@ class ClassroomStore {
     for (final uri in attempts) {
       final response = await http.get(uri, headers: headers);
       if (response.statusCode != 200) {
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          throw _ClassroomApiException(
+            response.statusCode,
+            'Google Classroom needs to be reconnected.',
+          );
+        }
         lastError =
             'Classroom courses request failed (${response.statusCode}): ${response.body}';
         continue;
       }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final rawCourses =
-          data['courses'] as List<dynamic>? ?? const <dynamic>[];
+      final rawCourses = data['courses'] as List<dynamic>? ?? const <dynamic>[];
       for (final entry in rawCourses) {
         final json = entry as Map<String, dynamic>;
         final id = (json['id'] as String?) ?? '';
@@ -359,7 +424,7 @@ class ClassroomStore {
     }
 
     if (seen.isEmpty && lastError != null) {
-      throw StateError(lastError);
+      throw _ClassroomApiException(0, lastError);
     }
     return seen.values.toList();
   }
@@ -373,22 +438,32 @@ class ClassroomStore {
     );
     final response = await http.get(uri, headers: headers);
     if (response.statusCode != 200) {
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        throw _ClassroomApiException(
+          response.statusCode,
+          'Google Classroom needs to be reconnected.',
+        );
+      }
       return <ClassroomAssignment>[];
     }
 
     final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final rawAssignments = data['courseWork'] as List<dynamic>? ?? const <dynamic>[];
+    final rawAssignments =
+        data['courseWork'] as List<dynamic>? ?? const <dynamic>[];
 
-    return rawAssignments.map((entry) {
-      final json = entry as Map<String, dynamic>;
-      return ClassroomAssignment(
-        id: (json['id'] as String?) ?? '',
-        courseId: course.id,
-        courseName: course.name,
-        title: (json['title'] as String?) ?? 'Untitled Assignment',
-        dueAt: _parseDueDate(json),
-      );
-    }).where((assignment) => assignment.id.isNotEmpty).toList();
+    return rawAssignments
+        .map((entry) {
+          final json = entry as Map<String, dynamic>;
+          return ClassroomAssignment(
+            id: (json['id'] as String?) ?? '',
+            courseId: course.id,
+            courseName: course.name,
+            title: (json['title'] as String?) ?? 'Untitled Assignment',
+            dueAt: _parseDueDate(json),
+          );
+        })
+        .where((assignment) => assignment.id.isNotEmpty)
+        .toList();
   }
 
   DateTime? _parseDueDate(Map<String, dynamic> json) {
@@ -405,15 +480,24 @@ class ClassroomStore {
     }
 
     final dueTime = json['dueTime'];
-    final hours = dueTime is Map<String, dynamic> ? (dueTime['hours'] as int? ?? 0) : 0;
-    final minutes = dueTime is Map<String, dynamic> ? (dueTime['minutes'] as int? ?? 0) : 0;
-    final seconds = dueTime is Map<String, dynamic> ? (dueTime['seconds'] as int? ?? 0) : 0;
+    final hours = dueTime is Map<String, dynamic>
+        ? (dueTime['hours'] as int? ?? 0)
+        : 0;
+    final minutes = dueTime is Map<String, dynamic>
+        ? (dueTime['minutes'] as int? ?? 0)
+        : 0;
+    final seconds = dueTime is Map<String, dynamic>
+        ? (dueTime['seconds'] as int? ?? 0)
+        : 0;
 
     return DateTime(year, month, day, hours, minutes, seconds);
   }
 
   void _setLoading(bool value) {
-    state.value = state.value.copyWith(isLoading: value, errorMessage: null);
+    state.value = state.value.copyWith(
+      isLoading: value,
+      errorMessage: value ? null : state.value.errorMessage,
+    );
   }
 
   void _setError(String message) {
@@ -423,4 +507,14 @@ class ClassroomStore {
       errorMessage: message,
     );
   }
+}
+
+class _ClassroomApiException implements Exception {
+  const _ClassroomApiException(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => message;
 }

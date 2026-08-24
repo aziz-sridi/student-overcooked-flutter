@@ -11,7 +11,9 @@ class SubjectStore {
 
   static const String _keyPrefix = 'student_overcooked_subjects_v1';
 
-  final ValueNotifier<List<String>> subjects = ValueNotifier<List<String>>(<String>[]);
+  final ValueNotifier<List<String>> subjects = ValueNotifier<List<String>>(
+    <String>[],
+  );
 
   bool _initialized = false;
   String? _activeUid;

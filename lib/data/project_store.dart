@@ -124,12 +124,16 @@ class ProjectStore {
         .where('memberUids', arrayContains: uid)
         .snapshots()
         .listen((snapshot) {
-      final projects = snapshot.docs
-          .map((doc) => ProjectItem.fromFirestore(doc.id, doc.data()))
-          .toList()
-        ..sort((a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()));
-      projectsNotifier.value = projects;
-    });
+          final projects =
+              snapshot.docs
+                  .map((doc) => ProjectItem.fromFirestore(doc.id, doc.data()))
+                  .toList()
+                ..sort(
+                  (a, b) =>
+                      a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+                );
+          projectsNotifier.value = projects;
+        });
   }
 
   String _memberLabel(User user) {
@@ -147,7 +151,10 @@ class ProjectStore {
   String _newInviteCode() {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final random = Random.secure();
-    return List<String>.generate(8, (_) => alphabet[random.nextInt(alphabet.length)]).join();
+    return List<String>.generate(
+      8,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
   }
 
   String _extractInviteToken(String raw) {

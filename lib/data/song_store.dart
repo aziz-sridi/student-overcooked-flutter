@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum SongSourceKind { asset, file }
@@ -21,11 +21,11 @@ class Song {
   final SongSourceKind kind;
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'title': title,
-        'source': source,
-        'kind': kind.name,
-      };
+    'id': id,
+    'title': title,
+    'source': source,
+    'kind': kind.name,
+  };
 
   factory Song.fromJson(Map<String, dynamic> json) {
     return Song(
@@ -57,19 +57,20 @@ class SongStore {
 
     // Bundled songs from assets/songs/
     try {
-      final manifestRaw = await rootBundle.loadString('AssetManifest.json');
-      final manifest = jsonDecode(manifestRaw) as Map<String, dynamic>;
-      for (final path in manifest.keys) {
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      for (final path in manifest.listAssets()) {
         if (!path.startsWith('assets/songs/')) continue;
         final lower = path.toLowerCase();
         if (!_assetExtensions.any(lower.endsWith)) continue;
         final name = path.substring('assets/songs/'.length);
-        list.add(Song(
-          id: 'asset::$path',
-          title: _titleFromFile(name),
-          source: path,
-          kind: SongSourceKind.asset,
-        ));
+        list.add(
+          Song(
+            id: 'asset::$path',
+            title: _titleFromFile(name),
+            source: path,
+            kind: SongSourceKind.asset,
+          ),
+        );
       }
     } catch (_) {
       // ignore
@@ -83,7 +84,8 @@ class SongStore {
         final decoded = jsonDecode(raw) as List<dynamic>;
         for (final item in decoded) {
           final song = Song.fromJson(item as Map<String, dynamic>);
-          if (song.kind == SongSourceKind.file && !File(song.source).existsSync()) {
+          if (song.kind == SongSourceKind.file &&
+              !File(song.source).existsSync()) {
             continue;
           }
           list.add(song);
@@ -97,7 +99,10 @@ class SongStore {
     _initialized = true;
   }
 
-  Future<void> addImportedSong({required String filePath, String? title}) async {
+  Future<void> addImportedSong({
+    required String filePath,
+    String? title,
+  }) async {
     final cleanTitle = (title ?? _titleFromFile(filePath)).trim();
     final song = Song(
       id: 'file::${DateTime.now().microsecondsSinceEpoch}',
@@ -115,8 +120,10 @@ class SongStore {
   }
 
   Future<void> _persistImported() async {
-    final imported =
-        songs.value.where((s) => s.kind == SongSourceKind.file).map((s) => s.toJson()).toList();
+    final imported = songs.value
+        .where((s) => s.kind == SongSourceKind.file)
+        .map((s) => s.toJson())
+        .toList();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, jsonEncode(imported));
   }

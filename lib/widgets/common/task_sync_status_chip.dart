@@ -4,11 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/task_store.dart';
 
 class TaskSyncStatusChip extends StatelessWidget {
-  const TaskSyncStatusChip({
-    super.key,
-    required this.state,
-    this.onRetry,
-  });
+  const TaskSyncStatusChip({super.key, required this.state, this.onRetry});
 
   final TaskSyncState state;
   final VoidCallback? onRetry;
@@ -36,17 +32,17 @@ class TaskSyncStatusChip extends StatelessWidget {
               Text(
                 config.label,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: config.foreground,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: config.foreground,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               if ((state.errorCode ?? '').isNotEmpty)
                 Text(
                   'code: ${state.errorCode}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: config.foreground.withValues(alpha: 0.9),
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: config.foreground.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
             ],
           ),
@@ -57,10 +53,10 @@ class TaskSyncStatusChip extends StatelessWidget {
               child: Text(
                 'Retry',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: config.foreground,
-                      fontWeight: FontWeight.w800,
-                      decoration: TextDecoration.underline,
-                    ),
+                  color: config.foreground,
+                  fontWeight: FontWeight.w800,
+                  decoration: TextDecoration.underline,
+                ),
               ),
             ),
           ],

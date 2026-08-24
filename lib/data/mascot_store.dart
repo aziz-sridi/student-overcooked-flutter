@@ -79,10 +79,15 @@ class MascotStore {
       }
       final data = snap.data()!;
       final remoteCoins = (data['coinBalance'] as num?)?.toInt();
-      final remoteOwned = (data['ownedMascots'] as List?)
+      final remoteOwned =
+          (data['ownedMascots'] as List?)
               ?.whereType<String>()
-              .map((name) => MascotKind.values
-                  .firstWhere((k) => k.name == name, orElse: () => MascotKind.potato))
+              .map(
+                (name) => MascotKind.values.firstWhere(
+                  (k) => k.name == name,
+                  orElse: () => MascotKind.potato,
+                ),
+              )
               .toSet() ??
           state.value.ownedMascots;
       final remoteKind = data['kind'] is String
@@ -93,7 +98,9 @@ class MascotStore {
           : state.value.kind;
       state.value = state.value.copyWith(
         coinBalance: remoteCoins ?? state.value.coinBalance,
-        ownedMascots: remoteOwned.isEmpty ? state.value.ownedMascots : remoteOwned,
+        ownedMascots: remoteOwned.isEmpty
+            ? state.value.ownedMascots
+            : remoteOwned,
         kind: remoteKind,
       );
       await _persistLocal();
@@ -103,7 +110,12 @@ class MascotStore {
   Future<void> setKind(MascotKind kind) async {
     final owned = {...state.value.ownedMascots, kind};
     state.value = state.value.copyWith(kind: kind, ownedMascots: owned);
-    await _persist(fields: {'kind': kind.name, 'ownedMascots': owned.map((k) => k.name).toList()});
+    await _persist(
+      fields: {
+        'kind': kind.name,
+        'ownedMascots': owned.map((k) => k.name).toList(),
+      },
+    );
   }
 
   Future<void> setCookedMeter(double value) async {
@@ -140,11 +152,13 @@ class MascotStore {
       ownedMascots: owned,
       kind: kind,
     );
-    await _persist(fields: {
-      'coinBalance': next,
-      'ownedMascots': owned.map((k) => k.name).toList(),
-      'kind': kind.name,
-    });
+    await _persist(
+      fields: {
+        'coinBalance': next,
+        'ownedMascots': owned.map((k) => k.name).toList(),
+        'kind': kind.name,
+      },
+    );
   }
 
   Future<void> _persist({Map<String, dynamic>? fields}) async {
@@ -255,8 +269,12 @@ class MascotState {
     if (ownedRaw is List) {
       owned = ownedRaw
           .whereType<String>()
-          .map((name) => MascotKind.values
-              .firstWhere((k) => k.name == name, orElse: () => MascotKind.potato))
+          .map(
+            (name) => MascotKind.values.firstWhere(
+              (k) => k.name == name,
+              orElse: () => MascotKind.potato,
+            ),
+          )
           .toSet();
       if (owned.isEmpty) owned = {MascotKind.potato};
     }

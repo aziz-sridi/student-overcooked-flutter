@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
@@ -11,7 +12,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       default:
-        throw UnsupportedError('DefaultFirebaseOptions are not configured for this platform.');
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not configured for this platform.',
+        );
     }
   }
 
@@ -22,7 +25,8 @@ class DefaultFirebaseOptions {
     projectId: 'studnetovercooked',
     authDomain: 'studnetovercooked.firebaseapp.com',
     storageBucket: 'studnetovercooked.firebasestorage.app',
-    databaseURL: 'https://studnetovercooked-default-rtdb.europe-west1.firebasedatabase.app',
+    databaseURL:
+        'https://studnetovercooked-default-rtdb.europe-west1.firebasedatabase.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
@@ -31,6 +35,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '888637651520',
     projectId: 'studnetovercooked',
     storageBucket: 'studnetovercooked.firebasestorage.app',
-    databaseURL: 'https://studnetovercooked-default-rtdb.europe-west1.firebasedatabase.app',
+    databaseURL:
+        'https://studnetovercooked-default-rtdb.europe-west1.firebasedatabase.app',
   );
 }

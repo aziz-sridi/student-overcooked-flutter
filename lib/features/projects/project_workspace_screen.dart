@@ -290,7 +290,10 @@ class _ProjectWorkspaceScreenState extends State<ProjectWorkspaceScreen>
     }
   }
 
-  Future<void> _sendChatAiPrompt(String prompt, {required String rawMessage}) async {
+  Future<void> _sendChatAiPrompt(
+    String prompt, {
+    required String rawMessage,
+  }) async {
     try {
       await ProjectChatStore.instance.sendMessage(
         projectId: widget.project.id,
@@ -552,6 +555,7 @@ class _ProjectTaskCard extends StatelessWidget {
           );
           FocusQueueStore.instance.markTaskCompletion(task.id, done);
         } catch (error) {
+          if (!context.mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -580,7 +584,8 @@ class _ChatTab extends StatelessWidget {
   final Stream<List<ProjectChatMessage>> messageStream;
   final TextEditingController inputController;
   final ValueChanged<String> onSendMessage;
-  final Future<void> Function(String prompt, {required String rawMessage}) onSendAiPrompt;
+  final Future<void> Function(String prompt, {required String rawMessage})
+  onSendAiPrompt;
   final String? currentUserId;
 
   @override
@@ -649,9 +654,12 @@ class _ChatTab extends StatelessWidget {
                               MarkdownBody(
                                 data: message.text,
                                 selectable: true,
-                                styleSheet: MarkdownStyleSheet.fromTheme(
-                                  Theme.of(context),
-                                ).copyWith(p: Theme.of(context).textTheme.bodyMedium),
+                                styleSheet:
+                                    MarkdownStyleSheet.fromTheme(
+                                      Theme.of(context),
+                                    ).copyWith(
+                                      p: Theme.of(context).textTheme.bodyMedium,
+                                    ),
                               )
                             else
                               Text(message.text),
@@ -688,9 +696,8 @@ class _ChatTab extends StatelessWidget {
                         ),
                         label: RichText(
                           text: TextSpan(
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                ),
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
                             children: const [
                               TextSpan(
                                 text: '/askai',
@@ -703,12 +710,14 @@ class _ChatTab extends StatelessWidget {
                             ],
                           ),
                         ),
-                        backgroundColor:
-                            AppColors.burntOrange.withValues(alpha: 0.10),
+                        backgroundColor: AppColors.burntOrange.withValues(
+                          alpha: 0.10,
+                        ),
                         side: const BorderSide(color: AppColors.burntOrange),
                         onPressed: () {
                           inputController.text = '/askai ';
-                          inputController.selection = TextSelection.fromPosition(
+                          inputController
+                              .selection = TextSelection.fromPosition(
                             TextPosition(offset: inputController.text.length),
                           );
                         },
@@ -717,53 +726,53 @@ class _ChatTab extends StatelessWidget {
                   ),
                 ),
                 Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: inputController,
-                    decoration: InputDecoration(
-                      hintText: 'Type a message or /askai to ask AI',
-                      filled: true,
-                      fillColor: AppColors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.cardStroke,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.cardStroke,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: inputController,
+                        decoration: InputDecoration(
+                          hintText: 'Type a message or /askai to ask AI',
+                          filled: true,
+                          fillColor: AppColors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.cardStroke,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.cardStroke,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    FloatingActionButton.small(
+                      onPressed: () {
+                        final raw = inputController.text.trim();
+                        if (raw.isEmpty) {
+                          return;
+                        }
+                        inputController.clear();
+                        if (raw.toLowerCase().startsWith('/askai')) {
+                          final prompt = raw.substring(6).trim();
+                          if (prompt.isEmpty) {
+                            return;
+                          }
+                          onSendAiPrompt(prompt, rawMessage: raw);
+                          return;
+                        }
+                        onSendMessage(raw);
+                      },
+                      backgroundColor: AppColors.burntOrange,
+                      foregroundColor: AppColors.white,
+                      child: const Icon(Icons.send_rounded),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                FloatingActionButton.small(
-                  onPressed: () {
-                    final raw = inputController.text.trim();
-                    if (raw.isEmpty) {
-                      return;
-                    }
-                    inputController.clear();
-                    if (raw.toLowerCase().startsWith('/askai')) {
-                      final prompt = raw.substring(6).trim();
-                      if (prompt.isEmpty) {
-                        return;
-                      }
-                      onSendAiPrompt(prompt, rawMessage: raw);
-                      return;
-                    }
-                    onSendMessage(raw);
-                  },
-                  backgroundColor: AppColors.burntOrange,
-                  foregroundColor: AppColors.white,
-                  child: const Icon(Icons.send_rounded),
-                ),
-              ],
-            ),
               ],
             ),
           ),
@@ -892,9 +901,12 @@ class _WorkspaceTab extends StatelessWidget {
                         ? MarkdownBody(
                             data: message.text,
                             selectable: true,
-                            styleSheet: MarkdownStyleSheet.fromTheme(
-                              Theme.of(context),
-                            ).copyWith(p: Theme.of(context).textTheme.bodyMedium),
+                            styleSheet:
+                                MarkdownStyleSheet.fromTheme(
+                                  Theme.of(context),
+                                ).copyWith(
+                                  p: Theme.of(context).textTheme.bodyMedium,
+                                ),
                           )
                         : Text(message.text),
                   ),
@@ -1114,7 +1126,7 @@ class _SettingsTab extends StatelessWidget {
                 child: Text(member.characters.first),
               ),
               title: Text(member),
-                trailing: TaskStore.instance.isCurrentUserLabel(member)
+              trailing: TaskStore.instance.isCurrentUserLabel(member)
                   ? const Text('You')
                   : IconButton(
                       icon: const Icon(Icons.person_remove_alt_1_outlined),

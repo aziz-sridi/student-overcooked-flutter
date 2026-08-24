@@ -59,7 +59,7 @@ class ProjectItem {
       typeLabel: (json['typeLabel'] as String?)?.trim().isNotEmpty == true
           ? (json['typeLabel'] as String).trim()
           : 'Project',
-        subject: (json['subject'] as String?)?.trim().isNotEmpty == true
+      subject: (json['subject'] as String?)?.trim().isNotEmpty == true
           ? (json['subject'] as String).trim()
           : null,
       completedTasks: 0,

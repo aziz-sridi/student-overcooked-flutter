@@ -1,8 +1,7 @@
-import 'dart:collection';
-
 import 'package:flutter/material.dart';
 
 import '../../data/subject_store.dart';
+import '../../data/task_store.dart';
 import '../../models/task_item.dart';
 
 Future<TaskItem?> showTaskEditorDialog(
@@ -62,7 +61,8 @@ class _TaskEditorDialogState extends State<_TaskEditorDialog> {
     _titleController = TextEditingController(
       text: widget.existing?.title ?? '',
     );
-    final initialSubject = widget.existing?.subject ??
+    final initialSubject =
+        widget.existing?.subject ??
         (widget.fixedProjectId != null
             ? (widget.fixedProjectTitle ?? widget.fixedSubject ?? '')
             : (widget.fixedSubject ?? ''));
@@ -83,7 +83,7 @@ class _TaskEditorDialogState extends State<_TaskEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final memberOptions = LinkedHashSet<String?>();
+    final memberOptions = <String?>{};
     memberOptions.add(null);
     memberOptions.addAll(widget.members);
     if (_assignee != null && _assignee!.isNotEmpty) {
@@ -208,8 +208,8 @@ class _TaskEditorDialogState extends State<_TaskEditorDialog> {
     final title = _titleController.text.trim();
     final subject = widget.fixedProjectId != null
         ? (widget.existing?.subject.trim().isNotEmpty == true
-            ? widget.existing!.subject.trim()
-            : (widget.fixedProjectTitle ?? widget.fixedSubject ?? '').trim())
+              ? widget.existing!.subject.trim()
+              : (widget.fixedProjectTitle ?? widget.fixedSubject ?? '').trim())
         : _subjectController.text.trim();
     if (title.isEmpty || subject.isEmpty) {
       return;
@@ -262,44 +262,59 @@ class _SubjectPicker extends StatelessWidget {
     return ValueListenableBuilder<List<String>>(
       valueListenable: SubjectStore.instance.subjects,
       builder: (context, subjects, _) {
-        final options = LinkedHashSet<String>();
-        if (selected != null && selected!.isNotEmpty) {
-          options.add(selected!);
-        }
-        options.addAll(subjects);
-
-        return DropdownButtonFormField<String>(
-          initialValue: options.contains(selected) ? selected : null,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Subject'),
-          hint: const Text('Choose a subject'),
-          items: [
-            for (final subject in options)
-              DropdownMenuItem<String>(
-                value: subject,
-                child: Text(subject, overflow: TextOverflow.ellipsis),
-              ),
-            const DropdownMenuItem<String>(
-              value: _addNewSentinel,
-              child: Row(
-                children: [
-                  Icon(Icons.add_circle_outline_rounded, size: 18),
-                  SizedBox(width: 8),
-                  Text('Add new subject…'),
-                ],
-              ),
-            ),
-          ],
-          onChanged: (value) async {
-            if (value == _addNewSentinel) {
-              final created = await _promptForNewSubject(context);
-              if (created != null && created.isNotEmpty) {
-                await SubjectStore.instance.addSubject(created);
-                onChanged(created);
-              }
-              return;
+        return ValueListenableBuilder<List<TaskItem>>(
+          valueListenable: TaskStore.instance.tasksNotifier,
+          builder: (context, tasks, _) {
+            final options = <String>{
+              ...subjects.where((subject) => subject.trim().isNotEmpty),
+              ...tasks
+                  .map((task) => task.subject.trim())
+                  .where((subject) => subject.isNotEmpty),
+            };
+            if (selected != null && selected!.trim().isNotEmpty) {
+              options.add(selected!.trim());
             }
-            onChanged(value);
+            final sortedOptions = options.toList()
+              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+            return DropdownButtonFormField<String>(
+              initialValue: options.contains(selected) ? selected : null,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Subject'),
+              hint: Text(
+                sortedOptions.isEmpty
+                    ? 'Add your first subject'
+                    : 'Choose a subject',
+              ),
+              items: [
+                for (final subject in sortedOptions)
+                  DropdownMenuItem<String>(
+                    value: subject,
+                    child: Text(subject, overflow: TextOverflow.ellipsis),
+                  ),
+                const DropdownMenuItem<String>(
+                  value: _addNewSentinel,
+                  child: Row(
+                    children: [
+                      Icon(Icons.add_circle_outline_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Add new subject…'),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (value) async {
+                if (value == _addNewSentinel) {
+                  final created = await _promptForNewSubject(context);
+                  if (created != null && created.isNotEmpty) {
+                    await SubjectStore.instance.addSubject(created);
+                    onChanged(created);
+                  }
+                  return;
+                }
+                onChanged(value);
+              },
+            );
           },
         );
       },

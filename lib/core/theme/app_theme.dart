@@ -19,21 +19,62 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
   );
 
-  final textTheme = GoogleFonts.manropeTextTheme(base.textTheme).apply(
+  final textTheme = GoogleFonts.nunitoSansTextTheme(base.textTheme).apply(
     bodyColor: isDark ? const Color(0xFFF5F5F5) : AppColors.textPrimary,
     displayColor: isDark ? const Color(0xFFF5F5F5) : AppColors.textPrimary,
   );
 
   return base.copyWith(
+    dividerColor: isDark ? const Color(0xFF65412F) : AppColors.divider,
     textTheme: textTheme,
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
-      foregroundColor: AppColors.textPrimary,
+      foregroundColor: isDark ? const Color(0xFFFFEDE0) : AppColors.textPrimary,
       elevation: 0,
     ),
     cardColor: base.colorScheme.surface,
-    dialogTheme: DialogThemeData(
-      backgroundColor: base.colorScheme.surface,
+    dialogTheme: DialogThemeData(backgroundColor: base.colorScheme.surface),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: isDark ? const Color(0xFF261710) : const Color(0xFFFFFBF6),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: isDark ? const Color(0xFF65412F) : AppColors.cardStroke,
+        ),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(
+          color: isDark ? const Color(0xFF65412F) : AppColors.cardStroke,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: AppColors.burntOrange, width: 2),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.burntOrange,
+        foregroundColor: AppColors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        textStyle: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        side: BorderSide(
+          color: isDark ? const Color(0xFF8A5A40) : AppColors.cardStroke,
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+    ),
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.progressTrack,
@@ -47,9 +88,7 @@ ThemeData buildAppTheme(Brightness brightness) {
         fontWeight: FontWeight.w600,
         color: AppColors.white,
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       type: BottomNavigationBarType.fixed,

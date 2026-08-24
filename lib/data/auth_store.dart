@@ -39,16 +39,29 @@ class AuthStore {
     await _sub?.cancel();
   }
 
-  Future<void> signInWithEmail({required String email, required String password}) async {
+  Future<void> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
     await _auth.signInWithEmailAndPassword(email: email, password: password);
   }
 
-  Future<void> createAccountWithEmail({required String email, required String password}) async {
-    final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
+  Future<void> createAccountWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    final cred = await _auth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
     final current = cred.user;
     if (current != null && !current.emailVerified) {
       await current.sendEmailVerification();
     }
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   Future<void> sendEmailVerification() async {
@@ -82,9 +95,18 @@ class AuthStore {
   }
 
   Future<void> signOut() async {
+    final google = _googleSignIn;
     try {
-      await _google?.signOut();
-    } catch (_) {}
-    await _auth.signOut();
+      await google.disconnect();
+    } catch (_) {
+      try {
+        await google.signOut();
+      } catch (_) {
+        // Firebase sign-out below still clears the app session.
+      }
+    } finally {
+      await _auth.signOut();
+      user.value = null;
+    }
   }
 }

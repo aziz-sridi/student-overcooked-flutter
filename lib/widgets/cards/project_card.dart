@@ -46,8 +46,8 @@ class ProjectCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 Icon(
@@ -64,12 +64,12 @@ class ProjectCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
-                  project.subject == null || project.subject!.isEmpty
-                  ? project.typeLabel
-                  : '${project.typeLabel} • ${project.subject}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
+                project.subject == null || project.subject!.isEmpty
+                    ? project.typeLabel
+                    : '${project.typeLabel} • ${project.subject}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
               ),
             ),
             const SizedBox(height: 14),
@@ -78,15 +78,15 @@ class ProjectCard extends StatelessWidget {
                 Text(
                   'Tasks',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const Spacer(),
                 Text(
                   '${project.completedTasks}/${project.totalTasks}',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
               ],
             ),
@@ -103,9 +103,9 @@ class ProjectCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(
               '${project.teamCount} member${project.teamCount > 1 ? 's' : ''}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),

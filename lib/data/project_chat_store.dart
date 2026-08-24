@@ -28,7 +28,9 @@ class ProjectChatMessage {
       senderUid: (json['senderUid'] as String?) ?? '',
       senderLabel: (json['senderLabel'] as String?) ?? 'Member',
       text: (json['text'] as String?) ?? '',
-      createdAt: createdAt is Timestamp ? createdAt.toDate() : DateTime.fromMillisecondsSinceEpoch(0),
+      createdAt: createdAt is Timestamp
+          ? createdAt.toDate()
+          : DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 }
@@ -48,10 +50,12 @@ class ProjectChatStore {
         .orderBy('createdAt', descending: false)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => ProjectChatMessage.fromFirestore(doc.id, doc.data()))
-          .toList();
-    });
+          return snapshot.docs
+              .map(
+                (doc) => ProjectChatMessage.fromFirestore(doc.id, doc.data()),
+              )
+              .toList();
+        });
   }
 
   Future<void> sendMessage({
@@ -96,11 +100,11 @@ class ProjectChatStore {
         .doc(projectId)
         .collection('messages')
         .add({
-      'text': trimmed,
-      'senderUid': 'ai',
-      'senderLabel': 'AI',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+          'text': trimmed,
+          'senderUid': 'ai',
+          'senderLabel': 'AI',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 
   String _memberLabel(User user) {

@@ -17,7 +17,9 @@ class AuthGateScreen extends StatelessWidget {
         if (user == null) {
           return const SignInScreen();
         }
-        final isGoogleUser = user.providerData.any((p) => p.providerId == 'google.com');
+        final isGoogleUser = user.providerData.any(
+          (p) => p.providerId == 'google.com',
+        );
         if (!user.emailVerified && !isGoogleUser) {
           return const VerifyEmailScreen();
         }

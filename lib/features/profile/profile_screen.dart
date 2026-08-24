@@ -12,13 +12,17 @@ import '../auth/sign_in_screen.dart';
 import '../auth/sign_up_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.scrollController});
+
+  final ScrollController? scrollController;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  bool _signingOut = false;
+
   @override
   void initState() {
     super.initState();
@@ -41,15 +45,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
       courseIds: selection.courseIds,
       assignmentIds: selection.assignmentIds,
     );
-    if (!mounted) return;
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Imports updated.')));
+  }
+
+  Future<void> _setNotifications(bool value) async {
+    final enabled = await NotificationStore.instance.setEnabled(value);
+    if (!mounted || !value || enabled) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Imports updated.')),
+      const SnackBar(
+        content: Text(
+          'Notifications were not allowed. You can enable them in system settings.',
+        ),
+      ),
     );
+  }
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'This clears your app and Google Classroom sessions on this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _signingOut = true);
+    try {
+      await ClassroomStore.instance.clearSession();
+      await AuthStore.instance.signOut();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not finish signing out. Try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _signingOut = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
+      controller: widget.scrollController,
       slivers: [
         SliverToBoxAdapter(
           child: SafeArea(
@@ -57,9 +112,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: AppTopBar(
               title: 'Profile',
               onShopTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ShopScreen()),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
               },
             ),
           ),
@@ -85,28 +140,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Icon(Icons.person, size: 34),
                       ),
                       const SizedBox(width: 12),
-                      ValueListenableBuilder<User?>(
-                        valueListenable: AuthStore.instance.user,
-                        builder: (context, user, _) {
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                user?.displayName ?? user?.email ?? 'Student',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.w800),
-                              ),
-                              Text(
-                                user?.emailVerified == true ? 'Email verified' : 'Email not verified',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
-                              ),
-                            ],
-                          );
-                        },
+                      Expanded(
+                        child: ValueListenableBuilder<User?>(
+                          valueListenable: AuthStore.instance.user,
+                          builder: (context, user, _) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  user?.displayName ?? user?.email ?? 'Student',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                Text(
+                                  user?.emailVerified == true
+                                      ? 'Email verified'
+                                      : 'Email not verified',
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
+                                      ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
@@ -114,8 +176,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     'Preferences',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   ValueListenableBuilder<bool>(
@@ -126,7 +188,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         secondary: const Icon(Icons.notifications_outlined),
                         title: const Text('Notifications'),
                         value: enabled,
-                        onChanged: (value) => NotificationStore.instance.setEnabled(value),
+                        onChanged: _setNotifications,
+                      );
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: NotificationStore.instance.enabled,
+                    builder: (context, enabled, _) {
+                      if (!enabled) return const SizedBox.shrink();
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            await NotificationStore.instance
+                                .showTestNotification();
+                          },
+                          icon: const Icon(Icons.notifications_active_outlined),
+                          label: const Text('Send test notification'),
+                        ),
                       );
                     },
                   ),
@@ -146,7 +225,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               if (value) {
                                 ThemeStore.instance.set(ThemeMode.system);
                               } else {
-                                ThemeStore.instance.set(isDark ? ThemeMode.dark : ThemeMode.light);
+                                ThemeStore.instance.set(
+                                  isDark ? ThemeMode.dark : ThemeMode.light,
+                                );
                               }
                             },
                           ),
@@ -158,8 +239,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onChanged: useSystem
                                 ? null
                                 : (value) => ThemeStore.instance.set(
-                                      value ? ThemeMode.dark : ThemeMode.light,
-                                    ),
+                                    value ? ThemeMode.dark : ThemeMode.light,
+                                  ),
                           ),
                         ],
                       );
@@ -169,8 +250,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     'Google Classroom',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   ValueListenableBuilder<ClassroomState>(
@@ -185,13 +266,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 Text(
                                   'Connect to see your classes and assignments.',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
                                         color: AppColors.textSecondary,
                                       ),
                                 ),
                                 const SizedBox(height: 8),
                                 FilledButton.icon(
-                                  onPressed: ClassroomStore.instance.connect,
+                                  onPressed: state.isLoading
+                                      ? null
+                                      : ClassroomStore.instance.connect,
                                   icon: const Icon(Icons.link_rounded),
                                   label: const Text('Connect Google Classroom'),
                                 ),
@@ -203,17 +287,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               runSpacing: 8,
                               children: [
                                 OutlinedButton.icon(
-                                  onPressed: ClassroomStore.instance.refresh,
+                                  onPressed: state.isLoading
+                                      ? null
+                                      : ClassroomStore.instance.refresh,
                                   icon: const Icon(Icons.refresh_rounded),
                                   label: const Text('Refresh'),
                                 ),
                                 FilledButton.icon(
-                                  onPressed: () => _openImportManager(context),
+                                  onPressed: state.isLoading
+                                      ? null
+                                      : () => _openImportManager(context),
                                   icon: const Icon(Icons.checklist_rounded),
                                   label: const Text('Manage imports'),
                                 ),
                                 OutlinedButton.icon(
-                                  onPressed: ClassroomStore.instance.disconnect,
+                                  onPressed: state.isLoading
+                                      ? null
+                                      : ClassroomStore.instance.disconnect,
                                   icon: const Icon(Icons.link_off_rounded),
                                   label: const Text('Disconnect'),
                                 ),
@@ -230,73 +320,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               padding: const EdgeInsets.only(top: 8),
                               child: Text(
                                 state.errorMessage!,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: AppColors.tomatoRed,
-                                    ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: AppColors.tomatoRed),
                               ),
                             ),
                           if (state.isConnected) ...[
                             const SizedBox(height: 12),
-                            Builder(builder: (context) {
-                              final importedCourses = state.courses
-                                  .where((c) => state.importedCourseIds.contains(c.id))
-                                  .toList();
-                              final importedAssignments = state.assignments
-                                  .where((a) => state.importedAssignmentIds.contains(a.id))
-                                  .toList();
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Tracked classes (${importedCourses.length})',
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  if (importedCourses.isEmpty)
-                                    Text(
-                                      'Nothing imported yet. Tap "Manage imports" to choose what to track.',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            color: AppColors.textSecondary,
-                                          ),
-                                    )
-                                  else
-                                    for (final course in importedCourses)
-                                      ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: const Icon(Icons.class_rounded),
-                                        title: Text(course.name),
-                                        subtitle: course.section == null
-                                            ? null
-                                            : Text(course.section!),
+                            Builder(
+                              builder: (context) {
+                                final importedCourses = state.courses
+                                    .where(
+                                      (c) => state.importedCourseIds.contains(
+                                        c.id,
                                       ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Tracked assignments (${importedAssignments.length})',
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  if (importedAssignments.isEmpty)
-                                    Text(
-                                      'No assignments tracked.',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            color: AppColors.textSecondary,
-                                          ),
                                     )
-                                  else
-                                    for (final assignment in importedAssignments)
-                                      ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: const Icon(Icons.assignment_outlined),
-                                        title: Text(assignment.title),
-                                        subtitle: Text('${assignment.courseName} • ${assignment.dueLabel}'),
-                                      ),
-                                ],
-                              );
-                            }),
+                                    .toList();
+                                final importedAssignments = state.assignments
+                                    .where(
+                                      (a) => state.importedAssignmentIds
+                                          .contains(a.id),
+                                    )
+                                    .toList();
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Tracked classes (${importedCourses.length})',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    if (importedCourses.isEmpty)
+                                      Text(
+                                        'Nothing imported yet. Tap "Manage imports" to choose what to track.',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppColors.textSecondary,
+                                            ),
+                                      )
+                                    else
+                                      for (final course in importedCourses)
+                                        ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: const Icon(
+                                            Icons.class_rounded,
+                                          ),
+                                          title: Text(course.name),
+                                          subtitle: course.section == null
+                                              ? null
+                                              : Text(course.section!),
+                                        ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Tracked assignments (${importedAssignments.length})',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleSmall
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    if (importedAssignments.isEmpty)
+                                      Text(
+                                        'No assignments tracked.',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: AppColors.textSecondary,
+                                            ),
+                                      )
+                                    else
+                                      for (final assignment
+                                          in importedAssignments)
+                                        ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: const Icon(
+                                            Icons.assignment_outlined,
+                                          ),
+                                          title: Text(assignment.title),
+                                          subtitle: Text(
+                                            '${assignment.courseName} • ${assignment.dueLabel}',
+                                          ),
+                                        ),
+                                  ],
+                                );
+                              },
+                            ),
                           ],
                         ],
                       );
@@ -310,13 +427,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             Expanded(
                               child: FilledButton(
-                                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SignInScreen())),
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const SignInScreen(),
+                                  ),
+                                ),
                                 child: const Text('Sign in'),
                               ),
                             ),
                             const SizedBox(width: 8),
                             OutlinedButton(
-                              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SignUpScreen())),
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SignUpScreen(),
+                                ),
+                              ),
                               child: const Text('Register'),
                             ),
                           ],
@@ -326,11 +451,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.logout),
-                        title: Text('Sign out (${value.displayName ?? value.email ?? 'Account'})'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () async {
-                          await AuthStore.instance.signOut();
-                        },
+                        title: const Text('Sign out'),
+                        subtitle: Text(
+                          value.displayName ?? value.email ?? 'Account',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: _signingOut
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : const Icon(Icons.chevron_right),
+                        enabled: !_signingOut,
+                        onTap: _signingOut ? null : _signOut,
                       );
                     },
                   ),
@@ -345,7 +481,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 class _ImportSelection {
-  const _ImportSelection({required this.courseIds, required this.assignmentIds});
+  const _ImportSelection({
+    required this.courseIds,
+    required this.assignmentIds,
+  });
   final Set<String> courseIds;
   final Set<String> assignmentIds;
 }
@@ -371,7 +510,11 @@ class _ImportManagerDialogState extends State<_ImportManagerDialog> {
     _selectedAssignments = {...widget.state.importedAssignmentIds};
   }
 
-  void _toggleCourse(ClassroomCourse course, bool checked, List<ClassroomAssignment> courseAssignments) {
+  void _toggleCourse(
+    ClassroomCourse course,
+    bool checked,
+    List<ClassroomAssignment> courseAssignments,
+  ) {
     setState(() {
       if (checked) {
         _selectedCourses.add(course.id);
@@ -421,9 +564,9 @@ class _ImportManagerDialogState extends State<_ImportManagerDialog> {
             const SizedBox(height: 6),
             Text(
               'Tip: checking a class also picks its assignments.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -448,12 +591,13 @@ class _ImportManagerDialogState extends State<_ImportManagerDialog> {
                       child: Text(
                         'Other assignments',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     for (final assignment in orphanAssignments.where(
-                        (a) => matches(a.title) || matches(a.courseName)))
+                      (a) => matches(a.title) || matches(a.courseName),
+                    ))
                       _buildAssignmentTile(assignment),
                   ],
                 ],

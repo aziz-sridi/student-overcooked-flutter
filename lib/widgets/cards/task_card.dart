@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/task_item.dart';
 
+enum _TaskMenuAction { edit, focus, delete, more }
+
 class TaskCard extends StatelessWidget {
   const TaskCard({
     super.key,
@@ -35,71 +37,155 @@ class TaskCard extends StatelessWidget {
   final bool canClaim;
   final VoidCallback? onDelete;
 
+  bool get _hasMenuActions =>
+      onEdit != null ||
+      onAddToFocus != null ||
+      onDelete != null ||
+      onMore != null;
+
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(10, 12, 8, 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: task.isOverdue ? AppColors.tomatoRed.withValues(alpha: 0.35) : AppColors.cardStroke,
+          color: task.isOverdue
+              ? AppColors.tomatoRed.withValues(alpha: 0.38)
+              : Theme.of(context).dividerColor.withValues(alpha: 0.45),
         ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Checkbox(
-            value: task.isDone,
-            onChanged: (value) => onToggleComplete?.call(value ?? false),
-            activeColor: AppColors.burntOrange,
-            visualDensity: VisualDensity.compact,
-          ),
-          Container(
-            width: 4,
-            height: compact ? 44 : 62,
-            margin: const EdgeInsets.only(top: 4, right: 10),
-            decoration: BoxDecoration(
-              color: task.priorityColor,
-              borderRadius: BorderRadius.circular(12),
+          Semantics(
+            label: task.isDone
+                ? 'Mark ${task.title} as not complete'
+                : 'Mark ${task.title} as complete',
+            child: Checkbox(
+              value: task.isDone,
+              onChanged: onToggleComplete == null
+                  ? null
+                  : (value) => _requestCompletion(context, value ?? false),
+              activeColor: AppColors.burntOrange,
+              visualDensity: VisualDensity.compact,
             ),
           ),
+          const SizedBox(width: 4),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  task.title,
-                  maxLines: compact ? 1 : 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        maxLines: compact ? 1 : 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              decoration: task.isDone
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
                       ),
+                    ),
+                    if (_hasMenuActions)
+                      PopupMenuButton<_TaskMenuAction>(
+                        tooltip: 'Task actions',
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.more_horiz_rounded),
+                        onSelected: _handleMenuAction,
+                        itemBuilder: (context) => [
+                          if (onEdit != null)
+                            PopupMenuItem(
+                              value: _TaskMenuAction.edit,
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  canEdit
+                                      ? Icons.edit_outlined
+                                      : Icons.lock_outline_rounded,
+                                ),
+                                title: Text(
+                                  canEdit ? 'Edit task' : 'Edit locked',
+                                ),
+                              ),
+                            ),
+                          if (onAddToFocus != null)
+                            const PopupMenuItem(
+                              value: _TaskMenuAction.focus,
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.playlist_add_rounded),
+                                title: Text('Send to Focus'),
+                              ),
+                            ),
+                          if (onMore != null)
+                            const PopupMenuItem(
+                              value: _TaskMenuAction.more,
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(Icons.more_horiz_rounded),
+                                title: Text('More options'),
+                              ),
+                            ),
+                          if (onDelete != null)
+                            const PopupMenuItem(
+                              value: _TaskMenuAction.delete,
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: AppColors.tomatoRed,
+                                ),
+                                title: Text(
+                                  'Delete task',
+                                  style: TextStyle(color: AppColors.tomatoRed),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: task.priorityColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    task.subject,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    _Tag(
+                      label: task.subject,
+                      background: task.priorityColor.withValues(alpha: 0.14),
+                      foreground: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    _Tag(
+                      label: '${_priorityLabel(task.priority)} priority',
+                      background: task.priorityColor.withValues(alpha: 0.12),
+                      foreground: task.priority == TaskPriority.medium
+                          ? Theme.of(context).colorScheme.onSurface
+                          : task.priorityColor,
+                    ),
+                  ],
                 ),
                 if (task.hasProject && showProjectLink) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 7),
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.folder_open_rounded,
                         size: 14,
-                        color: AppColors.statusInProgress.withValues(alpha: 0.9),
+                        color: AppColors.statusInProgress,
                       ),
                       const SizedBox(width: 5),
                       Expanded(
@@ -107,7 +193,8 @@ class TaskCard extends StatelessWidget {
                           task.projectTitle ?? 'Project linked',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
                                 color: AppColors.statusInProgress,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -118,137 +205,198 @@ class TaskCard extends StatelessWidget {
                 ],
                 if (ownerLabel != null || onClaim != null) ...[
                   const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       if (ownerLabel != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: ownerLabel == 'Unclaimed'
-                                ? AppColors.mustardYellow.withValues(alpha: 0.2)
-                                : AppColors.statusInProgress.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            ownerLabel!,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: ownerLabel == 'Unclaimed'
-                                      ? AppColors.textPrimary
-                                      : AppColors.statusInProgress,
+                        _Tag(
+                          label: ownerLabel!,
+                          background: ownerLabel == 'Unclaimed'
+                              ? AppColors.mustardYellow.withValues(alpha: 0.2)
+                              : AppColors.statusInProgress.withValues(
+                                  alpha: 0.15,
                                 ),
-                          ),
+                          foreground: ownerLabel == 'Unclaimed'
+                              ? Theme.of(context).colorScheme.onSurface
+                              : AppColors.statusInProgress,
                         ),
-                      if (onClaim != null) const SizedBox(width: 8),
-                      const Spacer(),
                       if (onClaim != null)
                         FilledButton.icon(
                           style: FilledButton.styleFrom(
-                            backgroundColor: AppColors.burntOrange,
-                            foregroundColor: AppColors.white,
-                            disabledBackgroundColor: AppColors.textSecondary.withValues(alpha: 0.2),
-                            disabledForegroundColor: AppColors.textSecondary,
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 9,
+                            ),
                           ),
                           onPressed: canClaim ? onClaim : null,
-                          icon: const Icon(Icons.pan_tool_alt_rounded, size: 16),
-                          label: Text(canClaim ? 'Claim This Task' : 'Claim Disabled'),
+                          icon: const Icon(
+                            Icons.pan_tool_alt_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            canClaim ? 'Claim task' : 'Claim disabled',
+                          ),
                         ),
                     ],
                   ),
                 ],
-                const SizedBox(height: 8),
-                Row(
+                const SizedBox(height: 9),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Icon(
-                      Icons.calendar_today_rounded,
-                      size: 14,
-                      color: task.isOverdue ? AppColors.tomatoRed : AppColors.textSecondary,
+                    _IconLabel(
+                      icon: Icons.calendar_today_rounded,
+                      label: task.deadlineLabel,
+                      color: task.isOverdue
+                          ? AppColors.tomatoRed
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      task.deadlineLabel,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: task.isOverdue ? AppColors.tomatoRed : AppColors.textSecondary,
-                            fontWeight: task.isOverdue || task.isDueSoon ? FontWeight.w800 : FontWeight.w600,
-                          ),
-                    ),
-                    if (task.isOverdue) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        'Overdue',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.tomatoRed,
-                              fontWeight: FontWeight.w800,
-                            ),
+                    if (task.isOverdue)
+                      const _Tag(
+                        label: 'Overdue',
+                        background: Color(0xFFFFE6E3),
+                        foreground: AppColors.tomatoRed,
+                      )
+                    else if (task.isDueSoon)
+                      _Tag(
+                        label: 'Due soon',
+                        background: AppColors.burntOrange.withValues(
+                          alpha: 0.12,
+                        ),
+                        foreground: AppColors.burntOrange,
                       ),
-                    ] else if (task.isDueSoon) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        'Due soon',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.burntOrange,
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
-                    ],
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: task.stateColor,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        task.stateLabel,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
+                    _Tag(
+                      label: task.stateLabel,
+                      background: task.stateColor.withValues(alpha: 0.14),
+                      foreground: task.stateColor,
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          Column(
-            children: [
-              if (onEdit != null)
-                IconButton(
-                  tooltip: canEdit ? 'Edit task' : 'Only task owner can edit',
-                  onPressed: canEdit ? onEdit : onEditLocked,
-                  icon: Icon(
-                    canEdit ? Icons.edit_outlined : Icons.lock_outline_rounded,
-                    color: canEdit ? AppColors.textSecondary : AppColors.textSecondary.withValues(alpha: 0.75),
-                  ),
-                ),
-              if (onAddToFocus != null)
-                IconButton(
-                  tooltip: 'Send to Focus',
-                  onPressed: onAddToFocus,
-                  icon: const Icon(Icons.playlist_add_rounded, color: AppColors.burntOrange),
-                ),
-              if (onDelete != null)
-                IconButton(
-                  tooltip: 'Delete task',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded, color: AppColors.tomatoRed),
-                ),
-              if (onMore != null)
-                IconButton(
-                  onPressed: onMore,
-                  icon: const Icon(Icons.more_vert, color: AppColors.textSecondary),
-                ),
-            ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _requestCompletion(BuildContext context, bool done) async {
+    if (!done) {
+      onToggleComplete?.call(false);
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.task_alt_rounded, color: AppColors.burntOrange),
+        title: const Text('Mark this task complete?'),
+        content: Text(
+          '“${task.title}” will move to your completed tasks.',
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Mark complete'),
           ),
         ],
       ),
+    );
+    if (confirmed == true) onToggleComplete?.call(true);
+  }
+
+  void _handleMenuAction(_TaskMenuAction action) {
+    switch (action) {
+      case _TaskMenuAction.edit:
+        canEdit ? onEdit?.call() : onEditLocked?.call();
+      case _TaskMenuAction.focus:
+        onAddToFocus?.call();
+      case _TaskMenuAction.delete:
+        onDelete?.call();
+      case _TaskMenuAction.more:
+        onMore?.call();
+    }
+  }
+
+  String _priorityLabel(TaskPriority priority) {
+    return switch (priority) {
+      TaskPriority.low => 'Low',
+      TaskPriority.medium => 'Medium',
+      TaskPriority.high => 'High',
+    };
+  }
+}
+
+class _Tag extends StatelessWidget {
+  const _Tag({
+    required this.label,
+    required this.background,
+    required this.foreground,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 210),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foreground,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _IconLabel extends StatelessWidget {
+  const _IconLabel({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -8,7 +8,8 @@ class FocusQueueStore {
   static final FocusQueueStore instance = FocusQueueStore._();
 
   final ValueNotifier<List<TaskItem>> queue = ValueNotifier<List<TaskItem>>([]);
-  final ValueNotifier<Set<String>> completedTaskIds = ValueNotifier<Set<String>>({});
+  final ValueNotifier<Set<String>> completedTaskIds =
+      ValueNotifier<Set<String>>({});
 
   TaskItem applyFocusState(TaskItem task) {
     if (completedTaskIds.value.contains(task.id)) {
@@ -39,12 +40,14 @@ class FocusQueueStore {
     completedTaskIds.value = updated;
 
     queue.value = queue.value
-        .map((task) => task.id == taskId
-            ? task.copyWith(
-                state: done ? TaskState.done : TaskState.notStarted,
-                completed: done,
-              )
-            : task)
+        .map(
+          (task) => task.id == taskId
+              ? task.copyWith(
+                  state: done ? TaskState.done : TaskState.notStarted,
+                  completed: done,
+                )
+              : task,
+        )
         .toList();
   }
 }
