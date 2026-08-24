@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../data/mascot_store.dart';
@@ -22,8 +23,58 @@ class AppTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final overlayStyle =
+        (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+            .copyWith(
+              statusBarColor: theme.colorScheme.surface,
+              systemStatusBarContrastEnforced: false,
+            );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ColoredBox(
+            color: theme.colorScheme.surface,
+            child: SafeArea(
+              bottom: false,
+              child: _ToolbarContent(
+                title: title,
+                leading: leading,
+                coins: coins,
+                showShopAction: showShopAction,
+                onShopTap: onShopTap,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarContent extends StatelessWidget {
+  const _ToolbarContent({
+    required this.title,
+    required this.leading,
+    required this.coins,
+    required this.showShopAction,
+    required this.onShopTap,
+  });
+
+  final String title;
+  final Widget? leading;
+  final int? coins;
+  final bool showShopAction;
+  final VoidCallback? onShopTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,

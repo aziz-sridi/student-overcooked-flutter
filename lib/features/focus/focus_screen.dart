@@ -260,16 +260,13 @@ class _FocusScreenState extends State<FocusScreen> with WidgetsBindingObserver {
       controller: widget.scrollController,
       slivers: [
         SliverToBoxAdapter(
-          child: SafeArea(
-            bottom: false,
-            child: AppTopBar(
-              title: 'Focus',
-              onShopTap: () {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
-              },
-            ),
+          child: AppTopBar(
+            title: 'Focus',
+            onShopTap: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+            },
           ),
         ),
         SliverPadding(

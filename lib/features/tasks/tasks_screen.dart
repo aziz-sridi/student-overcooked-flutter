@@ -82,16 +82,13 @@ class _TasksScreenState extends State<TasksScreen> {
         controller: widget.scrollController,
         slivers: [
           SliverToBoxAdapter(
-            child: SafeArea(
-              bottom: false,
-              child: AppTopBar(
-                title: 'Tasks',
-                onShopTap: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
-                },
-              ),
+            child: AppTopBar(
+              title: 'Tasks',
+              onShopTap: () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+              },
             ),
           ),
           SliverToBoxAdapter(

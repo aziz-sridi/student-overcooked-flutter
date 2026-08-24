@@ -107,16 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       controller: widget.scrollController,
       slivers: [
         SliverToBoxAdapter(
-          child: SafeArea(
-            bottom: false,
-            child: AppTopBar(
-              title: 'Profile',
-              onShopTap: () {
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
-              },
-            ),
+          child: AppTopBar(
+            title: 'Profile',
+            onShopTap: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+            },
           ),
         ),
         SliverFillRemaining(

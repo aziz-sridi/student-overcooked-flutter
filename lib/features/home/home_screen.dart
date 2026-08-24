@@ -30,16 +30,13 @@ class HomeScreen extends StatelessWidget {
         controller: scrollController,
         slivers: [
           SliverToBoxAdapter(
-            child: SafeArea(
-              bottom: false,
-              child: AppTopBar(
-                title: 'Student Overcooked',
-                onShopTap: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
-                },
-              ),
+            child: AppTopBar(
+              title: 'Student Overcooked',
+              onShopTap: () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+              },
             ),
           ),
           SliverPadding(

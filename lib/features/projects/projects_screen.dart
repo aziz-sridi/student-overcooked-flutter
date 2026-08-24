@@ -36,16 +36,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         controller: widget.scrollController,
         slivers: [
           SliverToBoxAdapter(
-            child: SafeArea(
-              bottom: false,
-              child: AppTopBar(
-                title: 'Projects',
-                onShopTap: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
-                },
-              ),
+            child: AppTopBar(
+              title: 'Projects',
+              onShopTap: () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ShopScreen()));
+              },
             ),
           ),
           SliverPadding(

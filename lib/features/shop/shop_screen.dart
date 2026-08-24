@@ -55,16 +55,13 @@ class _ShopScreenState extends State<ShopScreen> {
           body: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(
-                child: SafeArea(
-                  bottom: false,
-                  child: AppTopBar(
-                    title: 'Shop',
-                    showShopAction: false,
-                    leading: IconButton(
-                      tooltip: 'Back',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_rounded),
-                    ),
+                child: AppTopBar(
+                  title: 'Shop',
+                  showShopAction: false,
+                  leading: IconButton(
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
                   ),
                 ),
               ),
