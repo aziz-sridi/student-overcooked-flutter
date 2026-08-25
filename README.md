@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon/student_cooked_icon.png" width="170" alt="Student Overcooked app icon: a tired student in a brown hoodie" />
+  <img src="assets/mascots/student/cooked.png" width="170" alt="Student Overcooked mascot: a tired student in a brown hoodie" />
 </p>
 
 <h1 align="center">Student Overcooked</h1>
